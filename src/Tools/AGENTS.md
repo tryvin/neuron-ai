@@ -10,6 +10,8 @@ Tool system for agent capabilities. Tools are callable functions exposed to AI.
 | `Tool.php` | Base class with property definitions |
 | `ToolOutput.php` | DTO carrying a tool's result (text and/or `ContentBlockInterface[]`) |
 | `HasOutput.php` | Opt-in interface for tools that expose `getOutput(): ToolOutput` |
+| `HasInterrupt.php` | Interface for tools that can signal workflow interrupts |
+| `InterruptHandler.php` | Trait providing interrupt/resume storage for `HasInterrupt` tools |
 | `ProviderTool.php` | Wrapper for MCP server tools |
 | `ProviderToolInterface.php` | Contract for provider-exposed tools |
 
@@ -108,11 +110,103 @@ class GetTranscriptionTool extends Tool
 }
 ```
 
+## Interrupt Signaling
+
+Tools can pause the workflow and request external input (e.g., human approval, frontend interaction) by implementing `HasInterrupt`. Use the `InterruptHandler` trait for the standard implementation.
+
+```php
+use NeuronAI\Tools\Tool;
+use NeuronAI\Tools\HasInterrupt;
+use NeuronAI\Tools\InterruptHandler;
+use NeuronAI\Workflow\Interrupt\ApprovalRequest;
+use NeuronAI\Workflow\Interrupt\Action;
+
+class PurchaseTool extends Tool implements HasInterrupt
+{
+    use InterruptHandler;
+
+    public function __invoke(float $amount): string
+    {
+        // On resume, handle the user's response
+        if ($this->getResumeRequest() !== null) {
+            return 'Approved: $' . $amount;
+        }
+
+        // Signal an interrupt requesting approval
+        $this->setInterruptRequest(new ApprovalRequest(
+            "Approve purchase of \${$amount}?",
+            [new Action('approve', 'Approve', true)]
+        ));
+
+        return '';
+    }
+}
+```
+
+**Flow:**
+1. Tool's `__invoke` calls `setInterruptRequest()` — workflow pauses, `WorkflowInterrupt` is thrown
+2. `ToolNode` wraps the request in `ToolsInterruptRequest` (supports merging multiple in parallel)
+3. On resume, `ToolNode` injects the user's response via `setResumeRequest()` before re-execution
+4. Tool checks `getResumeRequest()` in `__invoke` and handles the response
+
+**How it works:**
+- Tools implementing `HasInterrupt` are checked after `execute()` in both `ToolNode` and `ParallelToolNode`
+- `ParallelToolNode` collects all tools' interrupt requests into a single `ToolsInterruptRequest`
+- Tools without `HasInterrupt` are unaffected — no overhead
+
+### Multi-Step State Tracking
+
+Tool properties survive serialization across interrupt/resume cycles, so tools can track progress through multiple confirmation steps using their own properties.
+
+```php
+class MultiStepTool extends Tool implements HasInterrupt
+{
+    use InterruptHandler;
+
+    private int $step = 0;
+    private array $steps = ['confirm action', 'confirm target'];
+
+    public function __invoke(mixed ...$params): string
+    {
+        // Advance step on resume
+        if ($this->getResumeRequest() !== null) {
+            $this->step++;
+        }
+
+        // All steps done
+        if ($this->step >= count($this->steps)) {
+            return 'All steps completed';
+        }
+
+        // Signal interrupt for current step
+        $this->setInterruptRequest(
+            new ApprovalRequest($this->steps[$this->step])
+        );
+
+        return '';
+    }
+}
+```
+
+On each resume, the tool's properties (like `$step`) are restored from serialization, allowing it to pick up where it left off. The old `interruptRequest` is automatically cleared by `ToolNode` when injecting the resume request.
+
+**Important:** Tools must use a **named class** (not anonymous) since anonymous classes cannot be serialized in PHP. Tools are serialized as part of the `WorkflowInterrupt` when persisted.
+
+## Building Headless / Frontend-Delegating Tools
+
+The library intentionally ships no built-in "headless tool". Use `HasInterrupt`
++ `InterruptHandler` to build one in your app: signal an `InterruptRequest`
+carrying a handler identifier and payload on first call, then return the
+frontend's response on resume (check `getResumeRequest()` in `__invoke`).
+
+For frontend protocols (e.g. streaming adapters), integrate at the
+transport layer of your application, not in the tool itself.
+
 ## Custom Run Key Tracking
 
 By default, Neuron tracks tool runs by tool name only. This means a tool called multiple times with different parameters counts against the same run limit.
 
-For tools that need custom tracking (e.g., parameter-aware), implement the `RunKeyInterface`:
+For tools that need custom tracking (e.g., parameter-aware), implement the `HasRunKey`:
 
 ```php
 use NeuronAI\Tools\Tool;
@@ -169,7 +263,7 @@ class ReadFileTool extends Tool implements HasRunKey
 
 **How it works:**
 
-- Tools implementing `RunKeyInterface` provide a unique key via `getRunKey(): string`
+- Tools implementing `HasRunKey` provide a unique key via `getRunKey(): string`
 - `ToolNode` and `ParallelToolNode` use the custom key for run tracking
 - Tools without the interface use the tool name (backwards compatible)
 - The `TrackByInputs` trait provides input-based key generation automatically
