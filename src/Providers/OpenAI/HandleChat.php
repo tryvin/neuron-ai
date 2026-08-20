@@ -63,14 +63,7 @@ trait HandleChat
         }
 
         if (isset($result['usage'])) {
-            $response->setUsage(
-                new Usage(
-                    $result['usage']['prompt_tokens'] ?? 0,
-                    $result['usage']['completion_tokens'] ?? 0,
-                    $result['usage']['prompt_tokens_details']['cached_tokens'] ?? 0,
-                    $result['usage']['completion_tokens_details']['reasoning_tokens'] ?? 0,
-                )
-            );
+            $response->setUsage($this->buildUsage($result['usage']));
         }
 
         // Extract citations from content annotations
@@ -87,6 +80,25 @@ trait HandleChat
     protected function createAssistantMessage(array $message): AssistantMessage
     {
         return new AssistantMessage($message['content']);
+    }
+
+    /**
+     * Build the Usage DTO from the provider usage payload.
+     *
+     * Override in subclasses (e.g. OpenRouter) to enrich the DTO with
+     * provider-specific data such as cost. The override can call
+     * `parent::buildUsage()` and then set the public cost properties.
+     *
+     * @param array<string, mixed> $usage
+     */
+    protected function buildUsage(array $usage): Usage
+    {
+        return new Usage(
+            $usage['prompt_tokens'] ?? 0,
+            $usage['completion_tokens'] ?? 0,
+            $usage['prompt_tokens_details']['cached_tokens'] ?? 0,
+            $usage['completion_tokens_details']['reasoning_tokens'] ?? 0,
+        );
     }
 
     /**

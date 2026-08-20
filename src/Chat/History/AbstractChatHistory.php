@@ -302,9 +302,17 @@ abstract class AbstractChatHistory implements ChatHistoryInterface
                 continue;
             }
             if ($key === 'usage') {
-                $item->setUsage(
-                    new Usage($message['usage']['input_tokens'], $message['usage']['output_tokens'])
-                );
+                $usage = $message['usage'];
+                $item->setUsage(new Usage(
+                    $usage['input_tokens'] ?? 0,
+                    $usage['output_tokens'] ?? 0,
+                    $usage['cached_input_tokens'] ?? 0,
+                    $usage['reasoning_tokens'] ?? 0,
+                    $usage['input_cost'] ?? null,
+                    $usage['output_cost'] ?? null,
+                    $usage['total_cost'] ?? null,
+                    $usage['currency'] ?? null,
+                ));
                 continue;
             }
             if ($key === 'citations' && is_array($value)) {

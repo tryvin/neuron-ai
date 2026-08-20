@@ -66,9 +66,7 @@ trait HandleChat
         }
 
         if (isset($response['prompt_eval_count'], $response['eval_count'])) {
-            $message->setUsage(
-                new Usage($response['prompt_eval_count'], $response['eval_count'])
-            );
+            $message->setUsage($this->buildUsage($response));
         }
 
         if (isset($response['done_reason'])) {
@@ -76,5 +74,21 @@ trait HandleChat
         }
 
         return $message;
+    }
+
+    /**
+     * Build the Usage DTO from the provider usage payload.
+     *
+     * Override in subclasses (e.g. Ollama Cloud) to enrich the DTO with
+     * provider-specific data such as cost.
+     *
+     * @param array<string, mixed> $usage
+     */
+    protected function buildUsage(array $usage): Usage
+    {
+        return new Usage(
+            $usage['prompt_eval_count'] ?? 0,
+            $usage['eval_count'] ?? 0,
+        );
     }
 }

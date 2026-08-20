@@ -93,7 +93,7 @@ trait HandleChat
 
             // Anthropic reports cache reads separately from `input_tokens`;
             // surface the cache-read count as the standard cached metric.
-            $message->setUsage(new Usage($usage['input_tokens'], $usage['output_tokens'], $cacheRead));
+            $message->setUsage($this->buildUsage($usage));
 
             if ($cacheWrite > 0 || $cacheRead > 0) {
                 $message->addMetadata('cacheWriteTokens', (string) $cacheWrite)
@@ -106,5 +106,22 @@ trait HandleChat
         }
 
         return $message;
+    }
+
+    /**
+     * Build the Usage DTO from the provider usage payload.
+     *
+     * Override in subclasses to enrich the DTO with provider-specific data
+     * such as cost.
+     *
+     * @param array<string, mixed> $usage
+     */
+    protected function buildUsage(array $usage): Usage
+    {
+        return new Usage(
+            $usage['input_tokens'] ?? 0,
+            $usage['output_tokens'] ?? 0,
+            $usage['cache_read_input_tokens'] ?? 0,
+        );
     }
 }
