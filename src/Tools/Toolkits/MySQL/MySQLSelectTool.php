@@ -119,7 +119,7 @@ Always use backticks around identifiers that are reserved keywords.'
 
         // Check for forbidden keywords that might be in subqueries
         foreach ($this->forbiddenStatements as $forbidden) {
-            if (self::containsKeyword($cleanQuery, $forbidden)) {
+            if ($this->containsKeyword($cleanQuery, $forbidden)) {
                 return false;
             }
         }
@@ -139,7 +139,7 @@ Always use backticks around identifiers that are reserved keywords.'
 
     protected function getFirstKeyword(string $query): string
     {
-        if (preg_match('/^\s*(\w+)/i', $query, $matches)) {
+        if (preg_match('/^\s*(\w+)/', $query, $matches)) {
             return strtoupper($matches[1]);
         }
         return '';

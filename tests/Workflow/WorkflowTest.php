@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace NeuronAI\Tests\Workflow;
 
 use NeuronAI\Exceptions\WorkflowException;
+use NeuronAI\Observability\Events\WorkflowInterrupted;
+use NeuronAI\Tests\Workflow\Executor\Stubs\RecordingObserver;
 use NeuronAI\Tests\Workflow\Stubs\ConditionalNode;
 use NeuronAI\Tests\Workflow\Stubs\FirstEvent;
 use NeuronAI\Tests\Workflow\Stubs\InterruptableNode;
@@ -19,6 +21,9 @@ use NeuronAI\Workflow\Persistence\InMemoryPersistence;
 use NeuronAI\Workflow\Workflow;
 use NeuronAI\Workflow\WorkflowState;
 use PHPUnit\Framework\TestCase;
+
+use function array_filter;
+use function reset;
 
 class WorkflowTest extends TestCase
 {
@@ -160,6 +165,45 @@ class WorkflowTest extends TestCase
         ]);
 
         $workflow->init()->run();
+    }
+
+    public function testWorkflowInterruptEmitsDedicatedEventAndNotError(): void
+    {
+        $observer = new RecordingObserver();
+
+        $workflow = Workflow::make(
+            persistence: new InMemoryPersistence(),
+            resumeToken: 'test-workflow'
+        )
+            ->observe($observer)
+            ->addNodes([
+                new NodeOne(),
+                new InterruptableNode(),
+                new NodeThree(),
+            ]);
+
+        try {
+            $workflow->init()->run();
+            $this->fail('Expected WorkflowInterrupt exception');
+        } catch (WorkflowInterrupt) {
+            // expected
+        }
+
+        $interrupts = array_filter(
+            $observer->recorded,
+            fn (array $r): bool => $r['event'] === 'workflow-interrupt'
+        );
+        $errors = array_filter(
+            $observer->recorded,
+            fn (array $r): bool => $r['event'] === 'error'
+        );
+
+        $this->assertCount(1, $interrupts, 'An interrupt should emit exactly one workflow-interrupt event');
+        $this->assertEmpty($errors, 'An interrupt must not be emitted as an error');
+
+        $payload = reset($interrupts)['data'];
+        $this->assertInstanceOf(WorkflowInterrupted::class, $payload);
+        $this->assertEquals('human input needed', $payload->interrupt->getRequest()->getMessage());
     }
 
     public function testWorkflowResume(): void

@@ -8,8 +8,6 @@ use NeuronAI\Tools\PropertyType;
 use NeuronAI\Tools\Tool;
 use NeuronAI\Tools\ToolProperty;
 
-use function floatval;
-
 class DivideTool extends Tool
 {
     public function __construct()
@@ -40,7 +38,7 @@ class DivideTool extends Tool
 
     public function __invoke(int|float $number1, int|float $number2): int|float|array
     {
-        if (floatval($number2) === 0.0) {
+        if ((float)$number2 === 0.0) {
             return [
                 'operation' => $this->name,
                 'error' => 'Division by zero is not allowed.',

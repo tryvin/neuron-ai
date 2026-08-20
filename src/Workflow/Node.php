@@ -14,7 +14,6 @@ use NeuronAI\Workflow\Interrupt\InterruptRequest;
 use NeuronAI\Workflow\Interrupt\WorkflowInterrupt;
 
 use function array_key_exists;
-use function call_user_func;
 use function is_callable;
 
 abstract class Node implements NodeInterface
@@ -68,7 +67,7 @@ abstract class Node implements NodeInterface
             return $result;
         }
 
-        $result = call_user_func($closure);
+        $result = $closure();
         $this->checkpoints[$name] = $result;
         return $result;
     }

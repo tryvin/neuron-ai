@@ -15,11 +15,12 @@ use NeuronAI\Observability\Events\InferenceStart;
 use NeuronAI\Observability\Events\InferenceStop;
 use NeuronAI\Providers\AIProviderInterface;
 use NeuronAI\Workflow\Events\StopEvent;
-use NeuronAI\Workflow\Node;
 use Generator;
 use Throwable;
 
-class StreamingNode extends Node
+use function end;
+
+class StreamingNode extends InferenceNode
 {
     use ChatHistoryHelper;
 
@@ -33,18 +34,17 @@ class StreamingNode extends Node
      */
     public function __invoke(AIInferenceEvent $event, AgentState $state): Generator|ToolCallEvent
     {
-        $this->addToChatHistory($state, $event->getMessages());
-
-        $chatHistory = $state->getChatHistory();
-        $lastMessage = $chatHistory->getLastMessage();
-
-        $this->emit('inference-start', new InferenceStart($lastMessage));
+        $inbound = $event->getMessages();
+        $messages = $this->pendingConversation($state, $inbound);
+        $lastMessage = end($messages);
 
         try {
+            $this->emit('inference-start', new InferenceStart($lastMessage));
+
             $stream = $this->provider
                 ->systemPrompt($event->instructions)
                 ->setTools($event->tools)
-                ->stream(...$chatHistory->getMessages());
+                ->stream(...$messages);
 
             // Yield all chunks as-is (TextChunk, ReasoningChunk, etc.)
             foreach ($stream as $chunk) {
@@ -55,6 +55,8 @@ class StreamingNode extends Node
             $message = $stream->getReturn();
 
             $this->emit('inference-stop', new InferenceStop($lastMessage, $message));
+
+            $this->addToChatHistory($state, $inbound);
 
             // Route based on the message type
             if ($message instanceof ToolCallMessage) {
