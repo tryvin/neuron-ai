@@ -208,11 +208,12 @@ class McpConnector
         $response = call_user_func(
             $this->client()->callTool(...),
             $item['name'],
-            $arguments
+            $arguments,
+            $this->paramHeadersFor($item, $arguments)
         );
 
         if (array_key_exists('error', $response)) {
-            throw new McpException($response['error']['message']);
+            throw new McpException($response['error']['message'], $response['error']['code'] ?? 0);
         }
 
         if (isset($response['result']) && is_array($response['result']) && array_key_exists('content', $response['result'])) {
@@ -220,5 +221,45 @@ class McpConnector
         }
 
         return '';
+    }
+
+    /**
+     * Extract Mcp-Param header values from the call arguments for tool
+     * parameters annotated with x-mcp-header in their inputSchema. The
+     * transport mirrors them into HTTP headers; the value lives only in
+     * the body for other transports. Headers with no value present in
+     * the arguments are omitted per the specification.
+     *
+     * @param  array<string, mixed>  $item
+     * @param  array<string, mixed>  $arguments
+     * @return array<string, string|int|bool>
+     */
+    protected function paramHeadersFor(array $item, array $arguments): array
+    {
+        $properties = $item['inputSchema']['properties'] ?? null;
+
+        if (! is_array($properties)) {
+            return [];
+        }
+
+        $headers = [];
+
+        foreach ($properties as $propertyName => $property) {
+            if (! is_array($property) || ! isset($property['x-mcp-header'])) {
+                continue;
+            }
+
+            $headerName = $property['x-mcp-header'];
+
+            if (! is_string($headerName) || $headerName === '') {
+                continue;
+            }
+
+            if (array_key_exists($propertyName, $arguments) && ! is_null($arguments[$propertyName])) {
+                $headers[$headerName] = $arguments[$propertyName];
+            }
+        }
+
+        return $headers;
     }
 }

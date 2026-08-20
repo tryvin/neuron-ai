@@ -32,9 +32,9 @@ class McpConnectorTest extends TestCase
      */
     private function createConnectorWithMockedClient(?McpClient $clientMock = null, array $extraResponses = []): array
     {
+        // Protocol negotiation (server/discover probe and the legacy
+        // initialize handshake) is answered by the fake transport itself.
         $transport = new FakeMcpTransport(
-            // Response for initialize request
-            ['jsonrpc' => '2.0', 'id' => 1, 'result' => []],
             ...$extraResponses
         );
 
@@ -193,8 +193,6 @@ class McpConnectorTest extends TestCase
     public function testFakeTransportInitializesCorrectly(): void
     {
         $transport = new FakeMcpTransport(
-            // Response for initialize request
-            ['jsonrpc' => '2.0', 'id' => 1, 'result' => []],
             // Response for tools/list request
             ['jsonrpc' => '2.0', 'id' => 2, 'result' => ['tools' => []]]
         );
@@ -210,8 +208,6 @@ class McpConnectorTest extends TestCase
     public function testFakeTransportToolsList(): void
     {
         $transport = new FakeMcpTransport(
-            // Response for initialize request
-            ['jsonrpc' => '2.0', 'id' => 1, 'result' => []],
             // Response for tools/list request with multiple tools
             [
                 'jsonrpc' => '2.0',
@@ -282,8 +278,6 @@ class McpConnectorTest extends TestCase
     public function testFakeTransportOnlyAndExcludeFilters(): void
     {
         $transport = new FakeMcpTransport(
-            // Response for initialize request
-            ['jsonrpc' => '2.0', 'id' => 1, 'result' => []],
             // Response for tools/list request
             [
                 'jsonrpc' => '2.0',
