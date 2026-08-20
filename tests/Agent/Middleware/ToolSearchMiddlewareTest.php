@@ -274,7 +274,6 @@ class ToolSearchMiddlewareTest extends TestCase
     public function test_middleware_works_with_mcp_generated_tools(): void
     {
         $transport = new FakeMcpTransport(
-            ['jsonrpc' => '2.0', 'id' => 1, 'result' => []],
             [
                 'jsonrpc' => '2.0',
                 'id' => 2,

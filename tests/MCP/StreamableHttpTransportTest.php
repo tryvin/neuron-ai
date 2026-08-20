@@ -68,7 +68,7 @@ class StreamableHttpTransportTest extends TestCase
     {
         $transport = new StreamableHttpTransport(['url' => 'https://example.com/mcp']);
         $reflection = new ReflectionClass($transport);
-        $method = $reflection->getMethod('parseSSEResponse');
+        $method = $reflection->getMethod('receiveSseResponse');
 
         $this->expectException(McpException::class);
         $this->expectExceptionMessage('No JSON data found in SSE response');
