@@ -72,14 +72,7 @@ trait HandleStream
 
             // Capture usage information
             if (!empty($line['usage'])) {
-                $this->streamState->addInputTokens($line['usage']['prompt_tokens'] ?? 0);
-                $this->streamState->addOutputTokens($line['usage']['completion_tokens'] ?? 0);
-                $this->streamState->addCachedInputTokens(
-                    $line['usage']['prompt_tokens_details']['cached_tokens'] ?? 0
-                );
-                $this->streamState->addReasoningTokens(
-                    $line['usage']['completion_tokens_details']['reasoning_tokens'] ?? 0
-                );
+                $this->streamState->setUsage($this->buildUsage($line['usage']));
             }
 
             if (empty($line['choices'])) {

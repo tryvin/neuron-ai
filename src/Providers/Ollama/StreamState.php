@@ -47,6 +47,13 @@ class StreamState
         return $this->usage;
     }
 
+    public function setUsage(Usage $usage): self
+    {
+        $this->usage = $usage;
+
+        return $this;
+    }
+
     /**
      * @return ContentBlockInterface[]
      */

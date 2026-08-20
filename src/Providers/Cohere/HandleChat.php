@@ -29,17 +29,28 @@ trait HandleChat
         }
 
         if (isset($result['usage'])) {
-            $response->setUsage(
-                new Usage(
-                    $result['usage']['tokens']['input_tokens'] ?? 0,
-                    $result['usage']['tokens']['output_tokens'] ?? 0
-                )
-            );
+            $response->setUsage($this->buildUsage($result['usage']));
         }
 
         $response->setStopReason($result['finish_reason']);
 
         return $response;
+    }
+
+    /**
+     * Build the Usage DTO from the provider usage payload.
+     *
+     * Override in subclasses to enrich the DTO with provider-specific data
+     * such as cost.
+     *
+     * @param array<string, mixed> $usage
+     */
+    protected function buildUsage(array $usage): Usage
+    {
+        return new Usage(
+            $usage['tokens']['input_tokens'] ?? 0,
+            $usage['tokens']['output_tokens'] ?? 0,
+        );
     }
 
     /**

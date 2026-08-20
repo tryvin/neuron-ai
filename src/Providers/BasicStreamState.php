@@ -60,6 +60,13 @@ class BasicStreamState
         return $this->usage;
     }
 
+    public function setUsage(Usage $usage): self
+    {
+        $this->usage = $usage;
+
+        return $this;
+    }
+
     public function messageId(?string $id = null): string
     {
         if ($id !== null) {

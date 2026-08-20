@@ -68,12 +68,7 @@ trait HandleChat
 
         $toolCalls = array_filter($result['output'], fn (array $item): bool => $item['type'] == 'function_call');
 
-        $usage = new Usage(
-            $result['usage']['input_tokens'] ?? 0,
-            $result['usage']['output_tokens'] ?? 0,
-            $result['usage']['input_tokens_details']['cached_tokens'] ?? 0,
-            $result['usage']['output_tokens_details']['reasoning_tokens'] ?? 0,
-        );
+        $usage = $this->buildUsage($result['usage'] ?? []);
 
         if ($toolCalls !== []) {
             $message = $this->createToolCallMessage($toolCalls)->setUsage($usage);
@@ -86,5 +81,23 @@ trait HandleChat
         }
 
         return $message;
+    }
+
+    /**
+     * Build the Usage DTO from the provider usage payload.
+     *
+     * Override in subclasses to enrich the DTO with provider-specific data
+     * such as cost.
+     *
+     * @param array<string, mixed> $usage
+     */
+    protected function buildUsage(array $usage): Usage
+    {
+        return new Usage(
+            $usage['input_tokens'] ?? 0,
+            $usage['output_tokens'] ?? 0,
+            $usage['input_tokens_details']['cached_tokens'] ?? 0,
+            $usage['output_tokens_details']['reasoning_tokens'] ?? 0,
+        );
     }
 }
