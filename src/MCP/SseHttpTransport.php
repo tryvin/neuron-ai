@@ -45,6 +45,12 @@ use const JSON_THROW_ON_ERROR;
  *
  * This transport handles Server-Sent Events (SSE) connections.
  * It uses a synchronous blocking approach compatible with NeuronAI's interface.
+ *
+ * @deprecated The HTTP+SSE transport belongs to protocol version 2024-11-05
+ *             and is deprecated by the MCP specification since 2025-03-26.
+ *             Use the Streamable HTTP transport (default for "url" configs)
+ *             instead. Kept for backward compatibility with legacy servers
+ *             during the deprecation window.
  */
 class SseHttpTransport implements McpTransportInterface
 {
@@ -263,7 +269,11 @@ class SseHttpTransport implements McpTransportInterface
                 $headers['Mcp-Session-Id'] = $this->sessionId;
             }
 
-            $jsonData = json_encode($data, JSON_THROW_ON_ERROR);
+            // HTTP-only request metadata never crosses the wire on the
+            // deprecated HTTP+SSE transport.
+            unset($data[StreamableHttpTransport::PARAM_HEADERS_KEY]);
+
+            $jsonData = json_encode($data, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
 
             // Send POST request to the endpoint URL
             $response = $this->httpClient->post($this->postEndpointUrl, [

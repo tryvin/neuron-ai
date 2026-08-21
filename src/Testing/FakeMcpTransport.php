@@ -28,6 +28,20 @@ class FakeMcpTransport implements McpTransportInterface
     protected int $sendCallCount = 0;
 
     /**
+     * When true, the server/discover probe is answered with a modern
+     * DiscoverResult instead of a legacy "method not found" error.
+     */
+    protected bool $modern = false;
+
+    /**
+     * Custom answer for the server/discover negotiation probe, scripted
+     * per test scenario (e.g. an UnsupportedProtocolVersionError).
+     *
+     * @var array<string, mixed>|null
+     */
+    protected ?array $discoverResponse = null;
+
+    /**
      * @param  array<string, mixed>  ...$responses  Predetermined responses to return sequentially from receive()
      */
     public function __construct(array ...$responses)
@@ -38,6 +52,30 @@ class FakeMcpTransport implements McpTransportInterface
     public function connect(): void
     {
         $this->connected = true;
+    }
+
+    /**
+     * Answer the server/discover negotiation probe as a modern
+     * (2026-07-28+) server. By default the fake behaves as a legacy
+     * server that does not know the method.
+     */
+    public function asModern(): self
+    {
+        $this->modern = true;
+
+        return $this;
+    }
+
+    /**
+     * Script a custom answer for the server/discover probe.
+     *
+     * @param array<string, mixed> $response
+     */
+    public function answerDiscoverWith(array $response): self
+    {
+        $this->discoverResponse = $response;
+
+        return $this;
     }
 
     public function __serialize(): array
@@ -73,15 +111,93 @@ class FakeMcpTransport implements McpTransportInterface
     {
         $this->receiveCallCount++;
 
-        if ($this->responseQueue === []) {
-            Assert::fail('FakeMcpTransport response queue is empty. Add more responses with addResponses() or pass them to the constructor.');
-        }
+        $pendingMethod = $this->sent[$this->sendCallCount - 1]['method'] ?? null;
+        $pendingId = $this->sent[$this->sendCallCount - 1]['id'] ?? null;
 
-        $response = array_shift($this->responseQueue);
+        $response = $this->negotiationResponse((string) $pendingMethod)
+            ?? $this->shiftQueuedResponse();
+
+        // Align the response id with the pending request so scripted
+        // queue responses never fail the client's id validation.
+        if ($pendingId !== null) {
+            $response['id'] = $pendingId;
+        }
 
         $this->received[] = $response;
 
         return $response;
+    }
+
+    /**
+     * Protocol negotiation answers, served outside the scripted queue:
+     * the server/discover probe and the legacy initialize handshake.
+     *
+     * @return array<string, mixed>|null
+     */
+    protected function negotiationResponse(string $method): ?array
+    {
+        if ($method === 'server/discover') {
+            if ($this->discoverResponse !== null) {
+                return $this->discoverResponse;
+            }
+
+            if ($this->modern) {
+                return [
+                    'jsonrpc' => '2.0',
+                    'result' => [
+                        'resultType' => 'complete',
+                        'supportedVersions' => ['2026-07-28'],
+                        'capabilities' => ['tools' => []],
+                        '_meta' => [
+                            'io.modelcontextprotocol/serverInfo' => [
+                                'name' => 'fake-mcp-server',
+                                'version' => '1.0.0',
+                            ],
+                        ],
+                        'instructions' => 'Fake server instructions.',
+                        'ttlMs' => 3600000,
+                        'cacheScope' => 'public',
+                    ],
+                ];
+            }
+
+            // Legacy servers do not implement server/discover.
+            return [
+                'jsonrpc' => '2.0',
+                'error' => [
+                    'code' => -32601,
+                    'message' => 'Method not found',
+                ],
+            ];
+        }
+
+        if ($method === 'initialize') {
+            return [
+                'jsonrpc' => '2.0',
+                'result' => [
+                    'protocolVersion' => '2024-11-05',
+                    'capabilities' => [],
+                    'serverInfo' => [
+                        'name' => 'fake-mcp-server',
+                        'version' => '1.0.0',
+                    ],
+                ],
+            ];
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function shiftQueuedResponse(): array
+    {
+        if ($this->responseQueue === []) {
+            Assert::fail('FakeMcpTransport response queue is empty. Add more responses with addResponses() or pass them to the constructor.');
+        }
+
+        return array_shift($this->responseQueue);
     }
 
     public function disconnect(): void
@@ -252,6 +368,15 @@ class FakeMcpTransport implements McpTransportInterface
     {
         $this->assertMethodSent('initialize', 1);
         $this->assertMethodSent('notifications/initialized', 1);
+    }
+
+    /**
+     * Assert that no initialize handshake was performed (modern server).
+     */
+    public function assertNotInitialized(): void
+    {
+        $this->assertMethodSent('initialize', 0);
+        $this->assertMethodSent('notifications/initialized', 0);
     }
 
     /**
