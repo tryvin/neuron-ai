@@ -332,13 +332,6 @@ class AgUIProtocolComplianceTest extends TestCase
                 $this->inputs = $inputs;
             }
 
-            public function setResult(mixed $result): self
-            {
-                $this->result = $result;
-
-                return $this;
-            }
-
             public function description(): string
             {
                 return 'Mock tool';

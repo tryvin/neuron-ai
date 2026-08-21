@@ -10,6 +10,7 @@ use GuzzleHttp\Middleware;
 use GuzzleHttp\Psr7\Response;
 use NeuronAI\Chat\Enums\SourceType;
 use NeuronAI\Chat\Messages\AssistantMessage;
+use NeuronAI\Chat\Messages\ContentBlocks\AudioContent;
 use NeuronAI\Chat\Messages\ContentBlocks\ImageContent;
 use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
 use NeuronAI\Chat\Messages\UserMessage;
@@ -142,6 +143,45 @@ class OpenAITest extends TestCase
                     'content' => [
                         ['type' => 'text', 'text' => 'Describe this image'],
                         ['type' => 'image_url', 'image_url' => ['url' => 'data:image/jpeg;base64,base_64_encoded_image']],
+                    ],
+                ],
+            ],
+        ];
+
+        $this->assertSame($expectedRequest, json_decode((string) $request['request']->getBody()->getContents(), true));
+        $this->assertSame('test response', $response->getContent());
+    }
+
+    public function test_chat_with_base64_audio(): void
+    {
+        $sentRequests = [];
+        $history = Middleware::history($sentRequests);
+        $mockHandler = new MockHandler([
+            new Response(status: 200, body: $this->body),
+        ]);
+        $stack = HandlerStack::create($mockHandler);
+        $stack->push($history);
+
+        $provider = (new OpenAI('', 'gpt-4o'))->setHttpClient(new GuzzleHttpClient(handler: $stack));
+
+        $message = (new UserMessage('Describe this audio'))
+            ->addContent(new AudioContent(content: 'base_64_encoded_audio', sourceType: SourceType::BASE64, mediaType: 'audio/wav'));
+
+        $response = $provider->chat($message);
+
+        // Ensure we sent one request
+        $this->assertCount(1, $sentRequests);
+        $request = $sentRequests[0];
+
+        // Ensure we have sent the expected request payload.
+        $expectedRequest = [
+            'model' => 'gpt-4o',
+            'messages' => [
+                [
+                    'role' => 'user',
+                    'content' => [
+                        ['type' => 'text', 'text' => 'Describe this audio'],
+                        ['type' => 'input_audio', 'input_audio' => ['data' => 'base_64_encoded_audio', 'format' => 'wav']],
                     ],
                 ],
             ],

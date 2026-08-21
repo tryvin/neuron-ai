@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace NeuronAI\Providers\OpenAI;
 
+use NeuronAI\Chat\Enums\MediaType;
 use NeuronAI\Chat\Enums\MessageRole;
 use NeuronAI\Chat\Enums\SourceType;
 use NeuronAI\Chat\Messages\AssistantMessage;
+use NeuronAI\Chat\Messages\ContentBlocks\AudioContent;
 use NeuronAI\Chat\Messages\ContentBlocks\ContentBlockInterface;
 use NeuronAI\Chat\Messages\ContentBlocks\FileContent;
 use NeuronAI\Chat\Messages\ContentBlocks\ImageContent;
@@ -27,6 +29,7 @@ use function array_map;
 use function array_merge;
 use function array_values;
 use function json_encode;
+use function strtolower;
 
 class MessageMapper implements MessageMapperInterface
 {
@@ -77,6 +80,7 @@ class MessageMapper implements MessageMapperInterface
                 'text' => $block->content,
             ],
             ImageContent::class => $this->mapImageBlock($block),
+            AudioContent::class => $this->mapAudioBlock($block),
             FileContent::class => $this->mapFileBlock($block),
             default => null,
         };
@@ -93,6 +97,22 @@ class MessageMapper implements MessageMapperInterface
                 },
             ],
         ];
+    }
+
+    protected function mapAudioBlock(AudioContent $block): array
+    {
+        return match ($block->sourceType) {
+            SourceType::BASE64 => [
+                'type' => 'input_audio',
+                'input_audio' => [
+                    'data' => $block->content,
+                    'format' => strtolower(
+                        MediaType::tryFrom($block->mediaType)?->name ?? 'wav'
+                    ),
+                ],
+            ],
+            default => null
+        };
     }
 
     protected function mapFileBlock(FileContent $block): ?array
