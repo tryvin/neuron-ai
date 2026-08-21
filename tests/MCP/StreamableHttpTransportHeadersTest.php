@@ -11,6 +11,10 @@ use NeuronAI\MCP\McpException;
 use NeuronAI\MCP\StreamableHttpTransport;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
+use stdClass;
+
+use function base64_encode;
+use function json_encode;
 
 class StreamableHttpTransportHeadersTest extends TestCase
 {
@@ -247,5 +251,41 @@ class StreamableHttpTransportHeadersTest extends TestCase
         ]);
 
         $this->assertSame('abc-123', $this->handler->getLastRequest()->getHeaderLine('Mcp-Session-Id'));
+    }
+
+    public function test_empty_params_serialized_as_object_and_metadata_extracted(): void
+    {
+        // McpClient emits an empty stdClass for requests with no params
+        // (e.g. the first tools/list page). The transport must serialize
+        // it as `{}` (not `[]`, which some servers reject) and still
+        // extract the Mcp-Name header from object params.
+        $this->queueResponse('{"jsonrpc":"2.0","id":1,"result":{"tools":[]}}');
+
+        $this->transport->send([
+            'jsonrpc' => '2.0',
+            'id' => 1,
+            'method' => 'tools/list',
+            'params' => new stdClass(),
+        ]);
+
+        $body = (string) $this->handler->getLastRequest()->getBody();
+
+        $this->assertStringContainsString('"params":{}', $body);
+        $this->assertStringNotContainsString('"params":[]', $body);
+        $this->assertSame('tools/list', $this->handler->getLastRequest()->getHeaderLine('Mcp-Method'));
+    }
+
+    public function test_object_params_name_header_is_extracted(): void
+    {
+        $this->queueResponse('{"jsonrpc":"2.0","id":1,"result":{}}');
+
+        $this->transport->send([
+            'jsonrpc' => '2.0',
+            'id' => 1,
+            'method' => 'tools/call',
+            'params' => (object) ['name' => 'get_weather'],
+        ]);
+
+        $this->assertSame('get_weather', $this->handler->getLastRequest()->getHeaderLine('Mcp-Name'));
     }
 }

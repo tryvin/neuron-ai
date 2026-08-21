@@ -11,6 +11,8 @@ use PHPUnit\Framework\TestCase;
 
 use function array_filter;
 use function array_values;
+use function array_column;
+use function count;
 
 class McpPromptsAndResourcesTest extends TestCase
 {

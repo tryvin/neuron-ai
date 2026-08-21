@@ -39,6 +39,7 @@ use function strpbrk;
 
 use const FILTER_VALIDATE_URL;
 use const JSON_THROW_ON_ERROR;
+use const JSON_UNESCAPED_SLASHES;
 
 /**
  * SSE HTTP Transport for MCP

@@ -22,6 +22,8 @@ use function array_map;
 use function call_user_func;
 use function in_array;
 use function is_array;
+use function is_null;
+use function is_string;
 
 /**
  * @method static static make(array<string, mixed> $config)
@@ -245,13 +247,17 @@ class McpConnector
         $headers = [];
 
         foreach ($properties as $propertyName => $property) {
-            if (! is_array($property) || ! isset($property['x-mcp-header'])) {
+            if (! is_array($property)) {
                 continue;
             }
-
+            if (! isset($property['x-mcp-header'])) {
+                continue;
+            }
             $headerName = $property['x-mcp-header'];
-
-            if (! is_string($headerName) || $headerName === '') {
+            if (! is_string($headerName)) {
+                continue;
+            }
+            if ($headerName === '') {
                 continue;
             }
 

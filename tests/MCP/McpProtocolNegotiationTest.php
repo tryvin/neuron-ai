@@ -11,6 +11,10 @@ use NeuronAI\MCP\McpInputRequiredException;
 use NeuronAI\MCP\McpProtocolVersions;
 use NeuronAI\Testing\FakeMcpTransport;
 use PHPUnit\Framework\TestCase;
+use stdClass;
+
+use function array_filter;
+use function array_values;
 
 class McpProtocolNegotiationTest extends TestCase
 {
@@ -59,7 +63,7 @@ class McpProtocolNegotiationTest extends TestCase
 
         $this->assertSame('2026-07-28', $meta['io.modelcontextprotocol/protocolVersion']);
         $this->assertSame('neuron-ai', $meta['io.modelcontextprotocol/clientInfo']->name);
-        $this->assertEquals(new \stdClass(), $meta['io.modelcontextprotocol/clientCapabilities']);
+        $this->assertEquals(new stdClass(), $meta['io.modelcontextprotocol/clientCapabilities']);
     }
 
     public function test_modern_server_exposes_identity_and_instructions(): void

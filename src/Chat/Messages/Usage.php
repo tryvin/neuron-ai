@@ -75,6 +75,6 @@ class Usage implements JsonSerializable
             'output_cost' => $this->outputCost,
             'total_cost' => $this->totalCost,
             'currency' => $this->currency,
-        ], fn ($value): bool => !is_null($value));
+        ], fn (int|string|null $value): bool => !is_null($value));
     }
 }

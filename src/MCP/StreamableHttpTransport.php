@@ -25,9 +25,12 @@ use function str_ends_with;
 use function str_starts_with;
 use function substr;
 use function trim;
+use function is_bool;
+use function is_object;
 
 use const FILTER_VALIDATE_URL;
 use const JSON_THROW_ON_ERROR;
+use const JSON_UNESCAPED_SLASHES;
 
 class StreamableHttpTransport implements McpTransportInterface, McpProtocolVersionAwareInterface
 {
@@ -236,7 +239,10 @@ class StreamableHttpTransport implements McpTransportInterface, McpProtocolVersi
             $headers['Mcp-Method'] = (string) $data['method'];
         }
 
-        $name = $data['params']['name'] ?? $data['params']['uri'] ?? null;
+        $params = $data['params'] ?? [];
+        $params = is_object($params) ? (array) $params : $params;
+
+        $name = $params['name'] ?? $params['uri'] ?? null;
 
         if (is_scalar($name) && (string) $name !== '') {
             $headers['Mcp-Name'] = $this->encodeHeaderValue((string) $name);
@@ -347,9 +353,11 @@ class StreamableHttpTransport implements McpTransportInterface, McpProtocolVersi
 
         foreach ($lines as $line) {
             $line = trim($line);
-
             // Skip empty lines and comments
-            if ($line === '' || str_starts_with($line, ':')) {
+            if ($line === '') {
+                continue;
+            }
+            if (str_starts_with($line, ':')) {
                 continue;
             }
 

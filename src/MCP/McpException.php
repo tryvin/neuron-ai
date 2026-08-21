@@ -5,20 +5,17 @@ declare(strict_types=1);
 namespace NeuronAI\MCP;
 
 use NeuronAI\Exceptions\NeuronException;
+use Throwable;
 
 class McpException extends NeuronException
 {
-    protected ?int $httpStatusCode = null;
-
     public function __construct(
         string $message = '',
         int $code = 0,
-        ?\Throwable $previous = null,
-        ?int $httpStatusCode = null,
+        ?Throwable $previous = null,
+        protected ?int $httpStatusCode = null,
     ) {
         parent::__construct($message, $code, $previous);
-
-        $this->httpStatusCode = $httpStatusCode;
     }
 
     /**

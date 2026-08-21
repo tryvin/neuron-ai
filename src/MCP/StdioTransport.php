@@ -30,6 +30,7 @@ use function microtime;
 use function usleep;
 
 use const JSON_THROW_ON_ERROR;
+use const JSON_UNESCAPED_SLASHES;
 
 class StdioTransport implements McpTransportInterface
 {

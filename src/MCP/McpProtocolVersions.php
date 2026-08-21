@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace NeuronAI\MCP;
 
+use function array_intersect;
+use function array_values;
+
 /**
  * MCP protocol revision constants and negotiation helpers.
  *

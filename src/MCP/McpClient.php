@@ -11,6 +11,8 @@ use function array_key_exists;
 use function array_merge;
 use function in_array;
 use function is_array;
+use function implode;
+use function is_null;
 
 class McpClient
 {
@@ -290,6 +292,12 @@ class McpClient
                 // advertise no client capabilities.
                 'io.modelcontextprotocol/clientCapabilities' => new stdClass(),
             ];
+        }
+
+        if ($params === []) {
+            // Some servers (e.g. Sanity) reject an empty array and expect
+            // params to be a JSON object when present. Serialize as `{}`.
+            $params = new stdClass();
         }
 
         return [
