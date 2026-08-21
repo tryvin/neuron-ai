@@ -6,6 +6,9 @@ namespace NeuronAI\Chat\Messages;
 
 use JsonSerializable;
 
+use function array_filter;
+use function is_null;
+
 class Usage implements JsonSerializable
 {
     public function __construct(
@@ -30,6 +33,26 @@ class Usage implements JsonSerializable
          * for non-reasoning models.
          */
         public int $reasoningTokens = 0,
+        /**
+         * Cost of the input tokens, expressed as a string to preserve
+         * decimal precision. Stays `null` when the provider does not expose
+         * cost (most providers). Enriched by providers that do (e.g. OpenRouter,
+         * Ollama Cloud) via their `buildUsage` hook.
+         */
+        public ?string $inputCost = null,
+        /**
+         * Cost of the output tokens. See `inputCost`.
+         */
+        public ?string $outputCost = null,
+        /**
+         * Total cost of the interaction. See `inputCost`.
+         */
+        public ?string $totalCost = null,
+        /**
+         * Currency the cost is expressed in (e.g. "USD", "credit"). Stays
+         * `null` when no cost is available.
+         */
+        public ?string $currency = null,
     ) {
     }
 
@@ -39,15 +62,19 @@ class Usage implements JsonSerializable
     }
 
     /**
-     * @return array<string, int>
+     * @return array<string, int|string>
      */
     public function jsonSerialize(): array
     {
-        return [
+        return array_filter([
             'input_tokens' => $this->inputTokens,
             'output_tokens' => $this->outputTokens,
             'cached_input_tokens' => $this->cachedInputTokens,
             'reasoning_tokens' => $this->reasoningTokens,
-        ];
+            'input_cost' => $this->inputCost,
+            'output_cost' => $this->outputCost,
+            'total_cost' => $this->totalCost,
+            'currency' => $this->currency,
+        ], fn ($value): bool => !is_null($value));
     }
 }

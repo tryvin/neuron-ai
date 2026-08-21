@@ -147,18 +147,29 @@ trait HandleChat
 
         // Attach the usage for the current interaction
         if (array_key_exists('usageMetadata', $result)) {
-            $message->setUsage(
-                new Usage(
-                    $result['usageMetadata']['promptTokenCount'],
-                    $result['usageMetadata']['candidatesTokenCount'] ?? 0,
-                    $result['usageMetadata']['cachedContentTokenCount'] ?? 0,
-                    $result['usageMetadata']['thoughtsTokenCount'] ?? 0,
-                )
-            );
+            $message->setUsage($this->buildUsage($result['usageMetadata']));
         }
 
         $message->setStopReason($finishReason);
 
         return $message;
+    }
+
+    /**
+     * Build the Usage DTO from the provider usage payload.
+     *
+     * Override in subclasses to enrich the DTO with provider-specific data
+     * such as cost.
+     *
+     * @param array<string, mixed> $usage
+     */
+    protected function buildUsage(array $usage): Usage
+    {
+        return new Usage(
+            $usage['promptTokenCount'] ?? 0,
+            $usage['candidatesTokenCount'] ?? 0,
+            $usage['cachedContentTokenCount'] ?? 0,
+            $usage['thoughtsTokenCount'] ?? 0,
+        );
     }
 }

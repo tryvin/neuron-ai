@@ -126,14 +126,9 @@ trait HandleStream
                      */
                 case 'response.completed':
                     $usage = $event['response']['usage'] ?? null;
-                    $this->streamState->addInputTokens($usage['input_tokens'] ?? 0);
-                    $this->streamState->addOutputTokens($usage['output_tokens'] ?? 0);
-                    $this->streamState->addCachedInputTokens(
-                        $usage['input_tokens_details']['cached_tokens'] ?? 0
-                    );
-                    $this->streamState->addReasoningTokens(
-                        $usage['output_tokens_details']['reasoning_tokens'] ?? 0
-                    );
+                    if ($usage !== null) {
+                        $this->streamState->setUsage($this->buildUsage($usage));
+                    }
 
                     if ($this->streamState->hasToolCalls()) {
                         return $this->createToolCallMessage(

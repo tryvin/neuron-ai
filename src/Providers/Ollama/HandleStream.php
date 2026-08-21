@@ -83,8 +83,7 @@ trait HandleStream
 
             // The last chunk will contain the usage information
             if ($line['done'] === true) {
-                $this->streamState->addInputTokens($line['prompt_eval_count'] ?? 0);
-                $this->streamState->addOutputTokens($line['eval_count'] ?? 0);
+                $this->streamState->setUsage($this->buildUsage($line));
             }
         }
 

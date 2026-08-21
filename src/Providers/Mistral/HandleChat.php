@@ -94,13 +94,27 @@ trait HandleChat
         }
 
         if (isset($result['usage'])) {
-            $response->setUsage(
-                new Usage($result['usage']['prompt_tokens'], $result['usage']['completion_tokens'])
-            );
+            $response->setUsage($this->buildUsage($result['usage']));
         }
 
         $response->setStopReason($choice['finish_reason']);
 
         return $response;
+    }
+
+    /**
+     * Build the Usage DTO from the provider usage payload.
+     *
+     * Override in subclasses to enrich the DTO with provider-specific data
+     * such as cost.
+     *
+     * @param array<string, mixed> $usage
+     */
+    protected function buildUsage(array $usage): Usage
+    {
+        return new Usage(
+            $usage['prompt_tokens'] ?? 0,
+            $usage['completion_tokens'] ?? 0,
+        );
     }
 }
