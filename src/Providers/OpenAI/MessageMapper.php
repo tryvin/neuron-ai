@@ -99,7 +99,7 @@ class MessageMapper implements MessageMapperInterface
         ];
     }
 
-    protected function mapAudioBlock(AudioContent $block): array
+    protected function mapAudioBlock(AudioContent $block): ?array
     {
         return match ($block->sourceType) {
             SourceType::BASE64 => [
