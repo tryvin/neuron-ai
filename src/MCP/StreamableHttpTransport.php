@@ -127,6 +127,13 @@ class StreamableHttpTransport implements McpTransportInterface, McpProtocolVersi
             $this->lastHttpStatusCode = $response->getStatusCode();
             $this->lastResponse = $response;
 
+            // Capture the session id the server assigns (legacy/stateful
+            // servers return it on initialize and expect it echoed back on
+            // every subsequent request). Modern stateless servers ignore it.
+            if ($response->hasHeader('Mcp-Session-Id')) {
+                $this->sessionId = $response->getHeaderLine('Mcp-Session-Id');
+            }
+
             if ($response->getStatusCode() === 401) {
                 throw new McpException('Authentication failed: Invalid or expired token', 0, null, 401);
             }

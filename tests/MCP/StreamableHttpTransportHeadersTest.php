@@ -216,4 +216,36 @@ class StreamableHttpTransportHeadersTest extends TestCase
 
         $this->assertSame(1, $response['id']);
     }
+
+    public function test_session_id_is_captured_and_echoed_on_subsequent_requests(): void
+    {
+        // The initialize handshake returns a session id the server assigns.
+        $this->handler->append(new Response(
+            200,
+            ['Mcp-Session-Id' => 'abc-123'],
+            '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2024-11-05"}}'
+        ));
+
+        $this->transport->send([
+            'jsonrpc' => '2.0',
+            'id' => 1,
+            'method' => 'initialize',
+            'params' => ['protocolVersion' => '2024-11-05'],
+        ]);
+
+        $sessionProperty = (new ReflectionClass($this->transport))->getProperty('sessionId');
+        $this->assertSame('abc-123', $sessionProperty->getValue($this->transport));
+
+        // Subsequent requests must echo the captured session id.
+        $this->queueResponse('{"jsonrpc":"2.0","id":2,"result":{"tools":[]}}');
+
+        $this->transport->send([
+            'jsonrpc' => '2.0',
+            'id' => 2,
+            'method' => 'tools/list',
+            'params' => [],
+        ]);
+
+        $this->assertSame('abc-123', $this->handler->getLastRequest()->getHeaderLine('Mcp-Session-Id'));
+    }
 }
