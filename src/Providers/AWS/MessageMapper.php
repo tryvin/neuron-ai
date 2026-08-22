@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace NeuronAI\Providers\AWS;
 
 use NeuronAI\Chat\Enums\SourceType;
-use NeuronAI\Chat\Messages\AssistantMessage;
 use NeuronAI\Chat\Messages\ContentBlocks\AudioContent;
 use NeuronAI\Chat\Messages\ContentBlocks\ContentBlockInterface;
 use NeuronAI\Chat\Messages\ContentBlocks\FileContent;
@@ -16,7 +15,6 @@ use NeuronAI\Chat\Messages\ContentBlocks\VideoContent;
 use NeuronAI\Chat\Messages\Message;
 use NeuronAI\Chat\Messages\ToolCallMessage;
 use NeuronAI\Chat\Messages\ToolResultMessage;
-use NeuronAI\Chat\Messages\UserMessage;
 use NeuronAI\Exceptions\ProviderException;
 use NeuronAI\Providers\MessageMapperInterface;
 use NeuronAI\Tools\HasOutput;
@@ -41,14 +39,15 @@ class MessageMapper implements MessageMapperInterface
         $mapping = [];
 
         foreach ($messages as $message) {
-            $mapping[] = match ($message::class) {
-                Message::class,
-                UserMessage::class,
-                AssistantMessage::class => $this->mapMessage($message),
-                ToolResultMessage::class => $this->mapToolCallResult($message),
-                ToolCallMessage::class => $this->mapToolCall($message),
-                default => throw new ProviderException('Could not map message type '.$message::class),
-            };
+            if ($message instanceof ToolCallMessage) {
+                $mapping[] = $this->mapToolCall($message);
+            } elseif ($message instanceof ToolResultMessage) {
+                $mapping[] = $this->mapToolCallResult($message);
+            } elseif ($message instanceof Message) {
+                $mapping[] = $this->mapMessage($message);
+            } else {
+                throw new ProviderException('Could not map message type '.$message::class);
+            }
         }
 
         return $mapping;
@@ -115,15 +114,31 @@ class MessageMapper implements MessageMapperInterface
 
     protected function mapContentBlock(ContentBlockInterface $block): ?array
     {
-        return match ($block::class) {
-            ReasoningContent::class => ['text' => $block->content, 'signature' => $block->id],
-            TextContent::class => ['text' => $block->content],
-            ImageContent::class => $this->mapImageBlock($block),
-            FileContent::class => $this->mapFileBlock($block),
-            AudioContent::class => $this->mapAudioBlock($block),
-            VideoContent::class => $this->mapVideoBlock($block),
-            default => null
-        };
+        if ($block instanceof ReasoningContent) {
+            return ['text' => $block->content, 'signature' => $block->id];
+        }
+
+        if ($block instanceof TextContent) {
+            return ['text' => $block->content];
+        }
+
+        if ($block instanceof ImageContent) {
+            return $this->mapImageBlock($block);
+        }
+
+        if ($block instanceof FileContent) {
+            return $this->mapFileBlock($block);
+        }
+
+        if ($block instanceof AudioContent) {
+            return $this->mapAudioBlock($block);
+        }
+
+        if ($block instanceof VideoContent) {
+            return $this->mapVideoBlock($block);
+        }
+
+        return null;
     }
 
     protected function mapImageBlock(ImageContent $block): ?array

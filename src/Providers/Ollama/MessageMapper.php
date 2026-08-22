@@ -6,13 +6,11 @@ namespace NeuronAI\Providers\Ollama;
 
 use NeuronAI\Chat\Enums\MessageRole;
 use NeuronAI\Chat\Enums\SourceType;
-use NeuronAI\Chat\Messages\AssistantMessage;
 use NeuronAI\Chat\Messages\ContentBlocks\ImageContent;
 use NeuronAI\Chat\Messages\ContentBlocks\TextContent;
 use NeuronAI\Chat\Messages\Message;
 use NeuronAI\Chat\Messages\ToolCallMessage;
 use NeuronAI\Chat\Messages\ToolResultMessage;
-use NeuronAI\Chat\Messages\UserMessage;
 use NeuronAI\Exceptions\ProviderException;
 use NeuronAI\Providers\MessageMapperInterface;
 use stdClass;
@@ -32,14 +30,15 @@ class MessageMapper implements MessageMapperInterface
         $this->mapping = [];
 
         foreach ($messages as $message) {
-            match ($message::class) {
-                Message::class,
-                UserMessage::class,
-                AssistantMessage::class => $this->mapMessage($message),
-                ToolCallMessage::class => $this->mapToolCall($message),
-                ToolResultMessage::class => $this->mapToolsResult($message),
-                default => throw new ProviderException('Could not map message type '.$message::class),
-            };
+            if ($message instanceof ToolCallMessage) {
+                $this->mapToolCall($message);
+            } elseif ($message instanceof ToolResultMessage) {
+                $this->mapToolsResult($message);
+            } elseif ($message instanceof Message) {
+                $this->mapMessage($message);
+            } else {
+                throw new ProviderException('Could not map message type '.$message::class);
+            }
         }
 
         return $this->mapping;

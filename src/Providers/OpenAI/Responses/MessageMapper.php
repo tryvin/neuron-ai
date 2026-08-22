@@ -6,10 +6,10 @@ namespace NeuronAI\Providers\OpenAI\Responses;
 
 use NeuronAI\Chat\Enums\MessageRole;
 use NeuronAI\Chat\Enums\SourceType;
-use NeuronAI\Chat\Messages\AssistantMessage;
 use NeuronAI\Chat\Messages\ContentBlocks\ContentBlockInterface;
 use NeuronAI\Chat\Messages\ContentBlocks\FileContent;
 use NeuronAI\Chat\Messages\ContentBlocks\ImageContent;
+use NeuronAI\Chat\Messages\ContentBlocks\ReasoningContent;
 use NeuronAI\Chat\Messages\ContentBlocks\TextContent;
 use NeuronAI\Chat\Messages\Message;
 use NeuronAI\Chat\Messages\ToolCallMessage;
@@ -37,14 +37,15 @@ class MessageMapper implements MessageMapperInterface
         $this->mapping = [];
 
         foreach ($messages as $message) {
-            match ($message::class) {
-                Message::class,
-                UserMessage::class,
-                AssistantMessage::class => $this->mapMessage($message),
-                ToolCallMessage::class => $this->mapToolCall($message),
-                ToolResultMessage::class => $this->mapToolsResult($message),
-                default => throw new ProviderException('Unknown message type '.$message::class),
-            };
+            if ($message instanceof ToolCallMessage) {
+                $this->mapToolCall($message);
+            } elseif ($message instanceof ToolResultMessage) {
+                $this->mapToolsResult($message);
+            } elseif ($message instanceof Message) {
+                $this->mapMessage($message);
+            } else {
+                throw new ProviderException('Unknown message type '.$message::class);
+            }
         }
 
         return $this->mapping;
@@ -71,12 +72,23 @@ class MessageMapper implements MessageMapperInterface
 
     protected function mapContentBlock(ContentBlockInterface $block, bool $isUser): ?array
     {
-        return match ($block::class) {
-            TextContent::class => $this->mapTextBlock($block, $isUser),
-            FileContent::class => $this->mapFileBlock($block),
-            ImageContent::class => $this->mapImageBlock($block),
-            default => null
-        };
+        if ($block instanceof ReasoningContent) {
+            return null;
+        }
+
+        if ($block instanceof TextContent) {
+            return $this->mapTextBlock($block, $isUser);
+        }
+
+        if ($block instanceof FileContent) {
+            return $this->mapFileBlock($block);
+        }
+
+        if ($block instanceof ImageContent) {
+            return $this->mapImageBlock($block);
+        }
+
+        return null;
     }
 
     protected function mapTextBlock(TextContent $block, bool $forUser): array

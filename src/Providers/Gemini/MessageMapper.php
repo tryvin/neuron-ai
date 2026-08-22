@@ -6,7 +6,6 @@ namespace NeuronAI\Providers\Gemini;
 
 use NeuronAI\Chat\Enums\MessageRole;
 use NeuronAI\Chat\Enums\SourceType;
-use NeuronAI\Chat\Messages\AssistantMessage;
 use NeuronAI\Chat\Messages\ContentBlocks\AudioContent;
 use NeuronAI\Chat\Messages\ContentBlocks\ContentBlock;
 use NeuronAI\Chat\Messages\ContentBlocks\FileContent;
@@ -17,7 +16,6 @@ use NeuronAI\Chat\Messages\ContentBlocks\VideoContent;
 use NeuronAI\Chat\Messages\Message;
 use NeuronAI\Chat\Messages\ToolCallMessage;
 use NeuronAI\Chat\Messages\ToolResultMessage;
-use NeuronAI\Chat\Messages\UserMessage;
 use NeuronAI\Exceptions\ProviderException;
 use NeuronAI\Providers\MessageMapperInterface;
 use NeuronAI\Tools\HasOutput;
@@ -38,14 +36,15 @@ class MessageMapper implements MessageMapperInterface
         $mapping = [];
 
         foreach ($messages as $message) {
-            $mapping[] = match ($message::class) {
-                Message::class,
-                UserMessage::class,
-                AssistantMessage::class => $this->mapMessage($message),
-                ToolCallMessage::class => $this->mapToolCall($message),
-                ToolResultMessage::class => $this->mapToolsResult($message),
-                default => throw new ProviderException('Could not map message type '.$message::class),
-            };
+            if ($message instanceof ToolCallMessage) {
+                $mapping[] = $this->mapToolCall($message);
+            } elseif ($message instanceof ToolResultMessage) {
+                $mapping[] = $this->mapToolsResult($message);
+            } elseif ($message instanceof Message) {
+                $mapping[] = $this->mapMessage($message);
+            } else {
+                throw new ProviderException('Could not map message type '.$message::class);
+            }
         }
 
         return $mapping;
@@ -66,20 +65,20 @@ class MessageMapper implements MessageMapperInterface
 
     protected function mapContentBlock(ContentBlock $block): ?array
     {
-        $item = match ($block::class) {
-            TextContent::class => [
-                'text' => $block->content,
-            ],
-            ReasoningContent::class => [
+        if ($block instanceof ReasoningContent) {
+            $item = [
                 'thought' => true,
                 'text' => $block->content,
-            ],
-            ImageContent::class,
-            FileContent::class,
-            AudioContent::class,
-            VideoContent::class => $this->mapMediaBlock($block),
-            default => null
-        };
+            ];
+        } elseif ($block instanceof TextContent) {
+            $item = [
+                'text' => $block->content,
+            ];
+        } elseif ($block instanceof ImageContent || $block instanceof FileContent || $block instanceof AudioContent || $block instanceof VideoContent) {
+            $item = $this->mapMediaBlock($block);
+        } else {
+            $item = null;
+        }
 
         if ($signature = $block->getMetadata('thought_signature')) {
             $item['thought_signature'] = $signature;

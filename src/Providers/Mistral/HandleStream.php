@@ -127,9 +127,9 @@ trait HandleStream
 
             $this->streamState->updateContentBlock($choice['index'], $block);
 
-            $chunk = match ($block::class) {
-                TextContent::class => new TextChunk($this->streamState->messageId(), $block->getContent()),
-                ReasoningContent::class => new ReasoningChunk($this->streamState->messageId(), $block->getContent()),
+            $chunk = match (true) {
+                $block instanceof ReasoningContent => new ReasoningChunk($this->streamState->messageId(), $block->getContent()),
+                $block instanceof TextContent => new TextChunk($this->streamState->messageId(), $block->getContent()),
                 default => null,
             };
 

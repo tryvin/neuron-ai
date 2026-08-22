@@ -6,7 +6,6 @@ namespace NeuronAI\Chat\History;
 
 use NeuronAI\Chat\Messages\ContentBlocks\ContentBlockInterface;
 use NeuronAI\Chat\Messages\ContentBlocks\ImageContent;
-use NeuronAI\Chat\Messages\ContentBlocks\ReasoningContent;
 use NeuronAI\Chat\Messages\ContentBlocks\TextContent;
 use NeuronAI\Chat\Messages\Message;
 use NeuronAI\Chat\Messages\ToolResultMessage;
@@ -48,10 +47,16 @@ class TokenCounter
         // Calculate chars contribution of blocks
         $chars = array_reduce(
             $message->getContentBlocks(),
-            fn (float $carry, ContentBlockInterface $block): float => $carry + match ($block::class) {
-                TextContent::class, ReasoningContent::class => $this->handleTextBlock($block),
-                ImageContent::class => $this->handleImageBlock($block),
-                default => 200 * $this->charsPerToken, // Audio and video blocks are not supported yet (fallback to 100 tokens)
+            function (float $carry, ContentBlockInterface $block): float {
+                if ($block instanceof TextContent) {
+                    return $carry + $this->handleTextBlock($block);
+                }
+
+                if ($block instanceof ImageContent) {
+                    return $carry + $this->handleImageBlock($block);
+                }
+
+                return $carry + 200 * $this->charsPerToken; // Audio and video blocks are not supported yet (fallback to 100 tokens)
             },
             $chars
         );

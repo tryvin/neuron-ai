@@ -8,6 +8,7 @@ use NeuronAI\Chat\Enums\SourceType;
 use NeuronAI\Chat\Messages\ContentBlocks\ContentBlockInterface;
 use NeuronAI\Chat\Messages\ContentBlocks\FileContent;
 use NeuronAI\Chat\Messages\ContentBlocks\ImageContent;
+use NeuronAI\Chat\Messages\ContentBlocks\ReasoningContent;
 use NeuronAI\Chat\Messages\ContentBlocks\TextContent;
 use NeuronAI\Chat\Messages\ContentBlocks\VideoContent;
 use NeuronAI\Chat\Messages\Message;
@@ -31,16 +32,30 @@ class MessageMapper extends OpenAIMessageMapper
 
     protected function mapContentBlock(ContentBlockInterface $block): ?array
     {
-        return match ($block::class) {
-            TextContent::class => [
+        if ($block instanceof ReasoningContent) {
+            return null;
+        }
+
+        if ($block instanceof TextContent) {
+            return [
                 'type' => 'text',
                 'text' => $block->content,
-            ],
-            ImageContent::class => $this->mapImageBlock($block),
-            FileContent::class => $this->mapFileBlock($block),
-            VideoContent::class => $this->mapVideoBlock($block),
-            default => null,
-        };
+            ];
+        }
+
+        if ($block instanceof ImageContent) {
+            return $this->mapImageBlock($block);
+        }
+
+        if ($block instanceof FileContent) {
+            return $this->mapFileBlock($block);
+        }
+
+        if ($block instanceof VideoContent) {
+            return $this->mapVideoBlock($block);
+        }
+
+        return null;
     }
 
     protected function mapFileBlock(FileContent $block): ?array

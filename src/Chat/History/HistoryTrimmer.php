@@ -273,7 +273,7 @@ class HistoryTrimmer implements HistoryTrimmerInterface
 
     protected function isUserMessage(Message $message): bool
     {
-        return $message::class === UserMessage::class;
+        return $message instanceof UserMessage && !$message instanceof ToolResultMessage;
     }
 
     protected function updateTokensFromMessage(Message $message, int $tokens): int
