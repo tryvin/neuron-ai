@@ -311,7 +311,7 @@ class McpClient
     /**
      * List all available tools from the MCP server
      *
-     * @return array<string, mixed>
+     * @return list<array<string, mixed>>
      *
      * @throws McpException
      */
@@ -352,7 +352,7 @@ class McpClient
     /**
      * List all available prompts from the MCP server.
      *
-     * @return array<string, mixed>
+     * @return list<array<string, mixed>>
      *
      * @throws McpException
      */
@@ -382,7 +382,7 @@ class McpClient
     /**
      * List all available resources from the MCP server.
      *
-     * @return array<string, mixed>
+     * @return list<array<string, mixed>>
      *
      * @throws McpException
      */
@@ -394,7 +394,7 @@ class McpClient
     /**
      * List parameterized resource templates (RFC 6570 URI templates).
      *
-     * @return array<string, mixed>
+     * @return list<array<string, mixed>>
      *
      * @throws McpException
      */
@@ -444,7 +444,7 @@ class McpClient
      * Drive a list-style RPC through its cursor pagination, accumulating
      * the contents of one result key across pages.
      *
-     * @return array<string, mixed>
+     * @return list<array<string, mixed>>
      *
      * @throws McpException
      */

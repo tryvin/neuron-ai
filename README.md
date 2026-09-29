@@ -22,15 +22,14 @@ In addition, we provide tutorials and other educational content to help you get 
 
 ## Why Neuron
 
-Your next application will be agentic. A growing share of new software is no longer a web application with AI features added along the way, but an application born agentic, where the agent is the architecture itself, driving how the system reasons, acts, and talks to its interface. Building this kind of application requires a specific set of foundations: event-driven workflows with checkpointing, human-in-the-loop interruption, multi-agent orchestration, streaming through agentic UI protocols like AG-UI and the Vercel AI SDK protocol, MCP, and asynchronous execution.
+Your next application will be agentic. A growing share of new software is no longer a web application with AI features added along the way, but an application born agentic, where the agent is the architecture itself, driving how the system reasons, acts, and talks to the user interface. Building this kind of application requires a specific set of foundations: event-driven workflows with checkpointing, human-in-the-loop, interruption, multi-agent orchestration, streaming, and agentic UI integration like AG-UI and the Vercel AI SDK, MCP connectors, and asynchronous execution.
 
-In the PHP ecosystem, this set of foundations exists in one place. Each one is a chapter of the documentation:
+Each one is a chapter of the documentation:
 [Workflow](#workflow),
 [Human in the loop](https://docs.neuron-ai.dev/workflow/human-in-the-loop),
 [Streaming & UI protocols](https://docs.neuron-ai.dev/agent/streaming#stream-adapters),
 [MCP](#mcp-connector),
 [Async](https://docs.neuron-ai.dev/agent/async).
-You can compare it with any other option available to a PHP developer, and the comparison is the answer.
 
 There is also no second framework waiting for you when the project grows. The same Workflow that runs your first agent in the getting started guide runs a multi-agent system with state, loops, and human approvals in production. What you learn on day one is what you ship in future projects.
 
@@ -38,7 +37,7 @@ There is also no second framework waiting for you when the project grows. The sa
 
 Neuron is also the only vertical ecosystem for agentic applications development in PHP. Around the framework there is a registry of extensions, tools, and technologies designed specifically for agentic applications, and a growing number of companies building on the same architecture instead of assembling their own from scattered parts.
 
-For a software house, this is a place to be recognized as a specialist rather than one more team claiming AI experience. For a company that needs an agentic foundation it can commit to for years, it means standardizing on an architecture whose whole direction is this space, not a general-purpose library where agents are a side feature.
+For a software house or a product company this is a place to be recognized as a specialist rather than one more team claiming AI experience. For a company that needs an agentic foundation it can commit to for years, it means standardizing on an architecture whose whole direction is this space, not a general-purpose library where AI is a side feature. It also means hiring becomes a solvable problem: as the community grows, so does the number of developers who already know how to design, test, and run agentic applications on this architecture, so the people you bring in tomorrow speak the same language as the system you are building today.
 
 ## Requirements
 
@@ -50,9 +49,7 @@ For a software house, this is a place to be recognized as a specialist rather th
 
 ## How To
 
-- [Install](#install)
-- [Create an Agent](#create)
-- [Talk to the Agent](#talk)
+- [Getting Started](#start)
 - [Monitoring](#monitoring)
 - [AI Providers](#providers)
 - [Tools & Toolkits](#tools)
@@ -64,23 +61,21 @@ For a software house, this is a place to be recognized as a specialist rather th
 - [Security Vulnerabilities](#security)
 - [Official Documentation](#documentation)
 
-<a name="install">
+<a name="start">
 
-## Install
+## Getting Started in 3 Steps
 
-Install the latest version via composer:
+### 1) Install
 
 ```
 composer require neuron-core/neuron-ai
 ```
 
-<a name="create">
-
-## Create an Agent
+### 2) Create an Agent
 
 Neuron provides you with the Agent class you can extend to inherit the main features of the framework
 and create fully functional agents. This class automatically manages some advanced mechanisms for you, such as memory,
-tools, and function calls, up to RAG (Retrieval Augmented Generation). You can go deeper into these aspects in the [documentation](https://docs.neuron-ai.dev).
+tools, up to RAG (Retrieval Augmented Generation). You can go deeper into these aspects below.
 
 Let's create an Agent with the command below:
 
@@ -110,21 +105,12 @@ class DataAnalystAgent extends Agent
 
     protected function instructions(): string
     {
-        return (string) new SystemPrompt(
-            background: [
-                "You are a data analyst expert in creating reports from SQL databases."
-            ]
-        );
+        return "You are a data analyst expert in creating reports from SQL databases.";
     }
 }
 ```
 
-The `SystemPrompt` class is designed to take your base instructions and build a consistent prompt for the underlying model
-reducing the effort for prompt engineering.
-
-<a name="talk">
-
-## Talk to the Agent
+### 3) Talk to the Agent
 
 Send a message to the agent to get a response from the underlying LLM:
 
@@ -153,17 +139,9 @@ As you can see in the example above, the Agent has memory of the ongoing convers
 
 ## Monitoring & Debugging
 
-Integrating AI Agents into your application, you’re not working only with functions and deterministic code,
-you program your agent influencing probability distributions. Same input ≠ output.
-That means reproducibility, versioning, and debugging become real problems.
-
 Many of the Agents you build with Neuron will contain multiple steps with multiple invocations of LLM calls,
 tool usage, access to external memories, etc. As these applications get more and more complex, it becomes crucial
 to be able to inspect what exactly your agent is doing and why.
-
-Why is the model taking certain decisions? What data is the model reacting to? Prompting is not programming
-in the common sense. No static types, small changes break output, long prompts cost latency,
-and no two models behave exactly the same with the same prompt.
 
 The best way to take your AI application under control is with [Inspector](https://inspector.dev). After you sign up,
 make sure to set the `INSPECTOR_INGESTION_KEY` variable in the application environment file to start monitoring:
@@ -182,16 +160,16 @@ Learn more about Monitoring in the [documentation](https://docs.neuron-ai.dev/ag
 
 ## Supported LLM Providers
 
-With Neuron, you can switch between [LLM providers](https://docs.neuron-ai.dev/components/ai-provider) with just one line of code, without any impact on your agent implementation.
+With Neuron, you can switch between [LLM providers](https://docs.neuron-ai.dev/providers/ai-provider) with just one line of code, without any impact on your agent implementation.
 Supported providers:
 
-- [Anthropic](https://docs.neuron-ai.dev/providers/ai-provider#anthropic) (supports [prompt caching](#anthropic-prompt-caching))
-- [OpenAI](https://docs.neuron-ai.dev/providers/ai-provider#openai) (also as an [embeddings provider](https://docs.neuron-ai.dev/rag/embeddings-provider#openai))
+- [Anthropic](https://docs.neuron-ai.dev/providers/ai-provider#anthropic)
+- [OpenAI](https://docs.neuron-ai.dev/providers/ai-provider#openai)
 - [OpenAI Responses API](https://docs.neuron-ai.dev/providers/ai-provider#openairesponses)
 - [OpenAI on Azure](https://docs.neuron-ai.dev/providers/ai-provider#azureopenai)
 - [OpenAILike](https://docs.neuron-ai.dev/providers/ai-provider#openailike) (OpenAI compatible APIs)
-- [Ollama](https://docs.neuron-ai.dev/providers/ai-provider#ollama) (also as an [embeddings provider](https://docs.neuron-ai.dev/rag/embeddings-provider#ollama))
-- [Gemini](https://docs.neuron-ai.dev/providers/ai-provider#gemini) (also as an [embeddings provider](https://docs.neuron-ai.dev/rag/embeddings-provider#gemini))
+- [Ollama](https://docs.neuron-ai.dev/providers/ai-provider#ollama)
+- [Gemini](https://docs.neuron-ai.dev/providers/ai-provider#gemini)
 - [Gemini Vertex](https://docs.neuron-ai.dev/providers/ai-provider#gemini-vertex-ai)
 - [Mistral](https://docs.neuron-ai.dev/providers/ai-provider#mistral)
 - [HuggingFace](https://docs.neuron-ai.dev/providers/ai-provider#huggingface)
@@ -421,7 +399,7 @@ to retrieval use cases, or tool calls, structured output, etc. Workflow allows y
 agentic system completely from scratch. Agent and RAG can be used inside a Workflow to complete tasks
 as any other component if you need their built-in capabilities.
 
-[![Neuron Workflow](./docs/images/workflow.png)](https://docs.neuron-ai.dev/v2/workflow/getting-started)
+[![Neuron Workflow](./docs/images/workflow.png)](https://docs.neuron-ai.dev/workflow/getting-started)
 
 Neuron Workflow supports a robust [**human-in-the-loop**](https://docs.neuron-ai.dev/workflow/human-in-the-loop)
 pattern, enabling human intervention at any point in an automated process. This is especially useful in
