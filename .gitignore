@@ -8,8 +8,13 @@ composer.lock
 .claude
 .artiforge
 .junie
+.codex
 .env
 scripts
 phpunit.xml.local
 CONTEXT.md
 docs/adr
+/tests/Integration/
+node_modules
+artifacts
+packages
