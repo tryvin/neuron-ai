@@ -67,9 +67,9 @@ class MessageMapper implements MessageMapperInterface
         if ($block instanceof ReasoningContent) {
             return [
                 'type' => 'thinking',
+                // A list of chunks, the shape Mistral sends and expects back
                 'thinking' => [
-                    'type' => 'text',
-                    'text' => $block->content,
+                    ['type' => 'text', 'text' => $block->content],
                 ],
             ];
         }
