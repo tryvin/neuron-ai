@@ -12,19 +12,23 @@ use NeuronAI\HttpClient\GuzzleHttpClient;
 use NeuronAI\HttpClient\HttpClientInterface;
 use NeuronAI\Providers\AIProviderInterface;
 use NeuronAI\Providers\HandleWithTools;
+use NeuronAI\Providers\HasToolChoice;
 use NeuronAI\HttpClient\HasHttpClient;
 use NeuronAI\Providers\MessageMapperInterface;
+use NeuronAI\Providers\SupportsToolChoice;
 use NeuronAI\Providers\ToolMapperInterface;
 use NeuronAI\Tools\ToolInterface;
 
 use function array_map;
 use function uniqid;
 use function array_values;
+use function is_array;
 
-class Gemini implements AIProviderInterface
+class Gemini implements AIProviderInterface, SupportsToolChoice
 {
     use HasHttpClient;
     use HandleWithTools;
+    use HasToolChoice;
     use HandleChat;
     use HandleStream;
     use HandleStructured;
@@ -73,6 +77,28 @@ class Gemini implements AIProviderInterface
     public function toolPayloadMapper(): ToolMapperInterface
     {
         return $this->toolPayloadMapper ??= new ToolMapper();
+    }
+
+    /**
+     * @return array{functionCallingConfig: array{mode: string, allowedFunctionNames?: array<int, string>}}
+     */
+    protected function toolChoicePayload(): array
+    {
+        $config = [
+            'mode' => match (true) {
+                $this->toolChoice === 'auto' => 'AUTO',
+                $this->toolChoice === 'none' => 'NONE',
+                $this->toolChoice === 'required' => 'ANY',
+                is_array($this->toolChoice) => 'ANY',
+                default => 'AUTO',
+            },
+        ];
+
+        if (is_array($this->toolChoice)) {
+            $config['allowedFunctionNames'] = [$this->toolChoice['name']];
+        }
+
+        return ['functionCallingConfig' => $config];
     }
 
     /**

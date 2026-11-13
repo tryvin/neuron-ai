@@ -16,7 +16,9 @@ use NeuronAI\HttpClient\HasHttpClient;
 use NeuronAI\HttpClient\HttpClientInterface;
 use NeuronAI\Providers\AIProviderInterface;
 use NeuronAI\Providers\HandleWithTools;
+use NeuronAI\Providers\HasToolChoice;
 use NeuronAI\Providers\MessageMapperInterface;
+use NeuronAI\Providers\SupportsToolChoice;
 use NeuronAI\Providers\ToolMapperInterface;
 use NeuronAI\Tools\ToolInterface;
 
@@ -25,11 +27,13 @@ use function array_merge;
 use function json_decode;
 use function uniqid;
 use function array_values;
+use function is_string;
 
-class OpenAIResponses implements AIProviderInterface
+class OpenAIResponses implements AIProviderInterface, SupportsToolChoice
 {
     use HasHttpClient;
     use HandleWithTools;
+    use HasToolChoice;
     use HandleChat;
     use HandleStream;
     use HandleStructured;
@@ -82,6 +86,25 @@ class OpenAIResponses implements AIProviderInterface
     public function toolPayloadMapper(): ToolMapperInterface
     {
         return $this->toolPayloadMapper ??= new ToolMapper();
+    }
+
+    /**
+     * @return string|array{type: string, name: string}|null
+     */
+    protected function toolChoicePayload(): string|array|null
+    {
+        if ($this->toolChoice === null) {
+            return null;
+        }
+
+        if (is_string($this->toolChoice)) {
+            return $this->toolChoice;
+        }
+
+        return [
+            'type' => 'function',
+            'name' => $this->toolChoice['name'],
+        ];
     }
 
     protected function createAssistantMessage(array $response): AssistantMessage

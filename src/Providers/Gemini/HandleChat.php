@@ -44,18 +44,22 @@ trait HandleChat
         if (!empty($this->tools)) {
             $body['tools'] = $this->toolPayloadMapper()->map($this->tools);
 
-            /*
-             * When Gemini thinking models (e.g. 2.5 Pro) are given function tools, they can spontaneously invoke built-in provider-side tools
-             * like run (code execution). Since these are never registered in NeuronAI's tool list, findTool() throws a ProviderException
-             */
-            foreach ($this->tools as $tool) {
-                if ($tool instanceof ToolInterface) {
-                    $body['toolConfig'] = [
-                        'functionCallingConfig' => [
-                            'mode' => 'AUTO',
-                        ],
-                    ];
-                    break;
+            if ($this->toolChoice !== null) {
+                $body['toolConfig'] = $this->toolChoicePayload();
+            } else {
+                /*
+                 * When Gemini thinking models (e.g. 2.5 Pro) are given function tools, they can spontaneously invoke built-in provider-side tools
+                 * like run (code execution). Since these are never registered in NeuronAI's tool list, findTool() throws a ProviderException
+                 */
+                foreach ($this->tools as $tool) {
+                    if ($tool instanceof ToolInterface) {
+                        $body['toolConfig'] = [
+                            'functionCallingConfig' => [
+                                'mode' => 'AUTO',
+                            ],
+                        ];
+                        break;
+                    }
                 }
             }
         }

@@ -14,6 +14,7 @@ use NeuronAI\Observability\Events\AgentError;
 use NeuronAI\Observability\Events\InferenceStart;
 use NeuronAI\Observability\Events\InferenceStop;
 use NeuronAI\Providers\AIProviderInterface;
+use NeuronAI\Providers\SupportsToolChoice;
 use NeuronAI\Workflow\Events\StopEvent;
 use Generator;
 use Throwable;
@@ -41,10 +42,15 @@ class StreamingNode extends InferenceNode
         try {
             $this->emit('inference-start', new InferenceStart($lastMessage));
 
-            $stream = $this->provider
+            $provider = $this->provider
                 ->systemPrompt($event->instructions)
-                ->setTools($event->tools)
-                ->stream(...$messages);
+                ->setTools($event->tools);
+
+            if ($event->toolChoice !== null && $provider instanceof SupportsToolChoice) {
+                $provider->toolChoice($event->toolChoice);
+            }
+
+            $stream = $provider->stream(...$messages);
 
             // Yield all chunks as-is (TextChunk, ReasoningChunk, etc.)
             foreach ($stream as $chunk) {

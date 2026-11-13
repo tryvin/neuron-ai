@@ -24,6 +24,7 @@ use NeuronAI\Observability\Events\SchemaGeneration;
 use NeuronAI\Observability\Events\Validated;
 use NeuronAI\Observability\Events\Validating;
 use NeuronAI\Providers\AIProviderInterface;
+use NeuronAI\Providers\SupportsToolChoice;
 use NeuronAI\StructuredOutput\Deserializer\Deserializer;
 use NeuronAI\StructuredOutput\Deserializer\DeserializerException;
 use NeuronAI\StructuredOutput\JsonExtractor;
@@ -92,10 +93,17 @@ class StructuredOutputNode extends InferenceNode
 
                 $this->emit('inference-start', new InferenceStart($last));
 
-                $response = $this->provider
+                $provider = $this->provider
                     ->systemPrompt($event->instructions)
-                    ->setTools($event->tools)
-                    ->structured($messages, $this->outputClass, $schema);
+                    ->setTools($event->tools);
+
+                // Structured output takes precedence over the event's tool choice.
+                // Ignoring "none" keeps the schema call able to produce the response.
+                if ($event->toolChoice !== null && $event->toolChoice !== 'none' && $provider instanceof SupportsToolChoice) {
+                    $provider->toolChoice($event->toolChoice);
+                }
+
+                $response = $provider->structured($messages, $this->outputClass, $schema);
 
                 $this->addToChatHistory($state, $pending);
                 $pending = [];

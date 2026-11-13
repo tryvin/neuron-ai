@@ -13,8 +13,10 @@ use NeuronAI\HttpClient\GuzzleHttpClient;
 use NeuronAI\HttpClient\HttpClientInterface;
 use NeuronAI\Providers\AIProviderInterface;
 use NeuronAI\Providers\HandleWithTools;
+use NeuronAI\Providers\HasToolChoice;
 use NeuronAI\HttpClient\HasHttpClient;
 use NeuronAI\Providers\MessageMapperInterface;
+use NeuronAI\Providers\SupportsToolChoice;
 use NeuronAI\Providers\ToolMapperInterface;
 use NeuronAI\Tools\ToolInterface;
 
@@ -24,10 +26,11 @@ use function mb_strlen;
 use function uniqid;
 use function array_values;
 
-class Anthropic implements AIProviderInterface
+class Anthropic implements AIProviderInterface, SupportsToolChoice
 {
     use HasHttpClient;
     use HandleWithTools;
+    use HasToolChoice;
     use HandleChat;
     use HandleStream;
     use HandleStructured;
@@ -151,9 +154,27 @@ class Anthropic implements AIProviderInterface
 
         if ($this->tools !== []) {
             $json['tools'] = $this->toolPayloadMapper()->map($this->tools);
+
+            if (($toolChoice = $this->toolChoicePayload()) !== null) {
+                $json['tool_choice'] = $toolChoice;
+            }
         }
 
         return $json;
+    }
+
+    /**
+     * @return array{type: string, name?: string}|null
+     */
+    protected function toolChoicePayload(): ?array
+    {
+        return match (true) {
+            $this->toolChoice === 'auto' => ['type' => 'auto'],
+            $this->toolChoice === 'none' => ['type' => 'none'],
+            $this->toolChoice === 'required' => ['type' => 'any'],
+            is_array($this->toolChoice) => ['type' => 'tool', 'name' => $this->toolChoice['name']],
+            default => null,
+        };
     }
 
     /**

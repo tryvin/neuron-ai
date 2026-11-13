@@ -14,18 +14,22 @@ use NeuronAI\HttpClient\HttpClientInterface;
 use NeuronAI\HttpClient\HttpRequest;
 use NeuronAI\Providers\AIProviderInterface;
 use NeuronAI\Providers\HandleWithTools;
+use NeuronAI\Providers\HasToolChoice;
 use NeuronAI\Providers\MessageMapperInterface;
+use NeuronAI\Providers\SupportsToolChoice;
 use NeuronAI\Providers\ToolMapperInterface;
 use NeuronAI\Tools\ToolInterface;
 
 use function array_map;
 use function json_decode;
 use function array_values;
+use function is_string;
 
-class OpenAI implements AIProviderInterface
+class OpenAI implements AIProviderInterface, SupportsToolChoice
 {
     use HasHttpClient;
     use HandleWithTools;
+    use HasToolChoice;
     use HandleChat;
     use HandleStream;
     use HandleStructured;
@@ -70,6 +74,27 @@ class OpenAI implements AIProviderInterface
             uri: 'chat/completions',
             body: $payload
         );
+    }
+
+    /**
+     * @return string|array{type: string, function: array{name: string}}|null
+     */
+    protected function toolChoicePayload(): string|array|null
+    {
+        if ($this->toolChoice === null) {
+            return null;
+        }
+
+        if (is_string($this->toolChoice)) {
+            return $this->toolChoice;
+        }
+
+        return [
+            'type' => 'function',
+            'function' => [
+                'name' => $this->toolChoice['name'],
+            ],
+        ];
     }
 
     public function systemPrompt(?string $prompt): AIProviderInterface

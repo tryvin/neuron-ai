@@ -39,6 +39,10 @@ trait HandleChat
         // Attach tools
         if (!empty($this->tools)) {
             $body['tools'] = $this->toolPayloadMapper()->map($this->tools);
+
+            if (($toolChoice = $this->toolChoicePayload()) !== null) {
+                $body['tool_choice'] = $toolChoice;
+            }
         }
 
         $response = $this->httpClient->request(

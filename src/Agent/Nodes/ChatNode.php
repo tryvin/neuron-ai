@@ -14,6 +14,7 @@ use NeuronAI\Chat\Messages\ToolCallMessage;
 use NeuronAI\Observability\Events\InferenceStart;
 use NeuronAI\Observability\Events\InferenceStop;
 use NeuronAI\Providers\AIProviderInterface;
+use NeuronAI\Providers\SupportsToolChoice;
 use NeuronAI\Workflow\Events\StopEvent;
 
 use function end;
@@ -72,9 +73,14 @@ class ChatNode extends InferenceNode
      */
     protected function inference(AIInferenceEvent $event, array $messages): Message
     {
-        return $this->provider
+        $provider = $this->provider
             ->systemPrompt($event->instructions)
-            ->setTools($event->tools)
-            ->chat(...$messages);
+            ->setTools($event->tools);
+
+        if ($event->toolChoice !== null && $provider instanceof SupportsToolChoice) {
+            $provider->toolChoice($event->toolChoice);
+        }
+
+        return $provider->chat(...$messages);
     }
 }

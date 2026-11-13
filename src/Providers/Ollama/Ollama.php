@@ -10,18 +10,21 @@ use NeuronAI\HttpClient\GuzzleHttpClient;
 use NeuronAI\HttpClient\HttpClientInterface;
 use NeuronAI\Providers\AIProviderInterface;
 use NeuronAI\Providers\HandleWithTools;
+use NeuronAI\Providers\HasToolChoice;
 use NeuronAI\HttpClient\HasHttpClient;
 use NeuronAI\Providers\MessageMapperInterface;
+use NeuronAI\Providers\SupportsToolChoice;
 use NeuronAI\Providers\ToolMapperInterface;
 use NeuronAI\Tools\ToolInterface;
 
 use function array_map;
 use function array_values;
 
-class Ollama implements AIProviderInterface
+class Ollama implements AIProviderInterface, SupportsToolChoice
 {
     use HasHttpClient;
     use HandleWithTools;
+    use HasToolChoice;
     use HandleChat;
     use HandleStream;
     use HandleStructured;
@@ -61,6 +64,21 @@ class Ollama implements AIProviderInterface
     public function toolPayloadMapper(): ToolMapperInterface
     {
         return $this->toolPayloadMapper ??= new ToolMapper();
+    }
+
+    public function toolChoice(string|array $toolChoice): static
+    {
+        $this->assertValidToolChoice($toolChoice);
+
+        if ($toolChoice !== 'auto' && $toolChoice !== 'none') {
+            throw new ProviderException(
+                'Ollama does not support forcing tool calls. Only auto and none are supported.'
+            );
+        }
+
+        $this->toolChoice = $toolChoice;
+
+        return $this;
     }
 
     /**

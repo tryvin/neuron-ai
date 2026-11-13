@@ -52,6 +52,24 @@ class Cohere extends OpenAI
         );
     }
 
+    /**
+     * Cohere accepts REQUIRED, NONE, or a tool name. "auto" is the provider
+     * default, so it is omitted instead of sending an unsupported AUTO value.
+     *
+     * @return string|array{type: string, name: string}|null
+     */
+    protected function toolChoicePayload(): string|array|null
+    {
+        return match (true) {
+            $this->toolChoice === null => null,
+            $this->toolChoice === 'auto' => null,
+            $this->toolChoice === 'none' => 'NONE',
+            $this->toolChoice === 'required' => 'REQUIRED',
+            is_array($this->toolChoice) => $this->toolChoice['name'],
+            default => null,
+        };
+    }
+
     public function structured(Message|array $messages, string $class, array $response_format): Message
     {
         $this->parameters = array_replace_recursive($this->parameters, [

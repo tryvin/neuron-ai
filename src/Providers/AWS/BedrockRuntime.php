@@ -13,19 +13,23 @@ use NeuronAI\HttpClient\HttpResponse;
 use NeuronAI\HttpClient\ProviderErrorClassifier;
 use NeuronAI\Providers\AIProviderInterface;
 use NeuronAI\Providers\HandleWithTools;
+use NeuronAI\Providers\HasToolChoice;
 use NeuronAI\Providers\MessageMapperInterface;
+use NeuronAI\Providers\SupportsToolChoice;
 use NeuronAI\Providers\ToolMapperInterface;
 use NeuronAI\Tools\ToolInterface;
 use Throwable;
 
 use function count;
+use function is_array;
 use function is_string;
 use function json_decode;
 use function json_encode;
 
-class BedrockRuntime implements AIProviderInterface
+class BedrockRuntime implements AIProviderInterface, SupportsToolChoice
 {
     use HandleWithTools;
+    use HasToolChoice;
     use HandleChat;
     use HandleStream;
     use HandleStructured;
@@ -75,10 +79,31 @@ class BedrockRuntime implements AIProviderInterface
         $tools = $this->toolPayloadMapper()->map($this->tools);
 
         if ($tools !== []) {
-            $payload['toolConfig']['tools'] = $tools;
+            // Bedrock Converse has no "none" tool choice. Omitting toolConfig is
+            // the emulation that prevents tool calls for this request.
+            if ($this->toolChoice !== 'none') {
+                $payload['toolConfig']['tools'] = $tools;
+
+                if (($toolChoice = $this->toolChoicePayload()) !== null) {
+                    $payload['toolConfig']['toolChoice'] = $toolChoice;
+                }
+            }
         }
 
         return $payload;
+    }
+
+    /**
+     * @return array{auto?: array<string, mixed>, any?: array<string, mixed>, tool?: array{name: string}}|null
+     */
+    protected function toolChoicePayload(): ?array
+    {
+        return match (true) {
+            $this->toolChoice === 'auto' => ['auto' => []],
+            $this->toolChoice === 'required' => ['any' => []],
+            is_array($this->toolChoice) => ['tool' => ['name' => $this->toolChoice['name']]],
+            default => null,
+        };
     }
 
     /**

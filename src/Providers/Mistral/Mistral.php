@@ -11,21 +11,25 @@ use NeuronAI\HttpClient\GuzzleHttpClient;
 use NeuronAI\HttpClient\HttpClientInterface;
 use NeuronAI\Providers\AIProviderInterface;
 use NeuronAI\Providers\HandleWithTools;
+use NeuronAI\Providers\HasToolChoice;
 use NeuronAI\HttpClient\HasHttpClient;
 use NeuronAI\Providers\MessageMapperInterface;
 use NeuronAI\Providers\OpenAI\HandleStructured;
 use NeuronAI\Providers\OpenAI\ToolMapper;
+use NeuronAI\Providers\SupportsToolChoice;
 use NeuronAI\Providers\ToolMapperInterface;
 use NeuronAI\Tools\ToolInterface;
 
 use function array_map;
 use function json_decode;
 use function array_values;
+use function is_string;
 
-class Mistral implements AIProviderInterface
+class Mistral implements AIProviderInterface, SupportsToolChoice
 {
     use HasHttpClient;
     use HandleWithTools;
+    use HasToolChoice;
     use HandleChat;
     use HandleStream;
     use HandleStructured; // From OpenAI
@@ -75,6 +79,27 @@ class Mistral implements AIProviderInterface
     public function toolPayloadMapper(): ToolMapperInterface
     {
         return $this->toolPayloadMapper ??= new ToolMapper();
+    }
+
+    /**
+     * @return string|array{type: string, function: array{name: string}}|null
+     */
+    protected function toolChoicePayload(): string|array|null
+    {
+        if ($this->toolChoice === null) {
+            return null;
+        }
+
+        if (is_string($this->toolChoice)) {
+            return $this->toolChoice;
+        }
+
+        return [
+            'type' => 'function',
+            'function' => [
+                'name' => $this->toolChoice['name'],
+            ],
+        ];
     }
 
     /**

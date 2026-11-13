@@ -16,6 +16,11 @@ use NeuronAI\Workflow\Events\Event;
 class AIInferenceEvent extends AgentStartEvent
 {
     /**
+     * @var string|array{type: string, name?: string}|null
+     */
+    public string|array|null $toolChoice = null;
+
+    /**
      * @param string $instructions System instructions for the agent
      * @param ToolInterface[] $tools Available tools for the agent
      * @param int|null $maxRetries Maximum retry attempts for structured output (StructuredOutputNode only)

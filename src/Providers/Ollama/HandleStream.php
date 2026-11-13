@@ -42,7 +42,9 @@ trait HandleStream
             ...$this->parameters,
         ];
 
-        if (!empty($this->tools)) {
+        // Ollama has no tool_choice field. For "none" we omit tools as the
+        // emulation so the model cannot call one; the definitions are not cacheable here.
+        if ($this->toolChoice !== 'none' && !empty($this->tools)) {
             $body['tools'] = $this->toolPayloadMapper()->map($this->tools);
         }
 
