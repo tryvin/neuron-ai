@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace NeuronAI\HttpClient;
 
+use Amp\ByteStream\ReadableBuffer;
 use Amp\ByteStream\ReadableResourceStream;
 use Amp\Http\Client\Form;
 use Amp\Http\Client\HttpClient;
@@ -39,11 +40,18 @@ class AmpHttpClient implements HttpClientInterface
         try {
             $response = $this->execute($request);
 
-            return new HttpResponse(
+            $httpResponse = new HttpResponse(
                 statusCode: $response->getStatus(),
                 body: $response->getBody()->buffer(),
                 headers: $response->getHeaders(),
             );
+
+            $contextWindowException = ProviderErrorClassifier::classify($request, $httpResponse);
+            if ($contextWindowException !== null) {
+                throw $contextWindowException;
+            }
+
+            return $httpResponse;
         } catch (HttpException $e) {
             throw $e;
         } catch (Throwable $e) {
@@ -113,6 +121,24 @@ class AmpHttpClient implements HttpClientInterface
     {
         try {
             $response = $this->execute($request);
+
+            $statusCode = $response->getStatus();
+            if ($statusCode === 400 || $statusCode === 413) {
+                $body = $response->getBody()->buffer();
+
+                $httpResponse = new HttpResponse(
+                    statusCode: $statusCode,
+                    body: $body,
+                    headers: $response->getHeaders(),
+                );
+
+                $contextWindowException = ProviderErrorClassifier::classify($request, $httpResponse);
+                if ($contextWindowException !== null) {
+                    throw $contextWindowException;
+                }
+
+                return new AmpStream(new ReadableBuffer($body));
+            }
 
             return new AmpStream($response->getBody());
         } catch (HttpException $e) {

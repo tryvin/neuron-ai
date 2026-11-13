@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace NeuronAI\Providers\AWS;
 
 use Aws\Api\Parser\EventParsingIterator;
+use Aws\Exception\AwsException;
+use Aws\Exception\EventStreamDataException;
 use Generator;
 use NeuronAI\Chat\Messages\AssistantMessage;
 use NeuronAI\Chat\Messages\ContentBlocks\ReasoningContent;
@@ -14,10 +16,13 @@ use NeuronAI\Chat\Messages\Stream\Chunks\ReasoningChunk;
 use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
 use NeuronAI\Chat\Messages\ToolCallMessage;
 use NeuronAI\Exceptions\ProviderException;
+use NeuronAI\HttpClient\ProviderErrorClassifier;
 
 use function array_map;
 use function base64_encode;
 use function count;
+use function json_encode;
+use function str_ends_with;
 
 trait HandleStream
 {
@@ -32,7 +37,18 @@ trait HandleStream
     public function stream(Message ...$messages): Generator
     {
         $payload = $this->createPayLoad($messages);
-        $result = $this->bedrockRuntimeClient->converseStream($payload);
+
+        try {
+            $result = $this->bedrockRuntimeClient->converseStream($payload);
+        } catch (AwsException $e) {
+            $exception = $this->contextWindowException($e);
+
+            if ($exception !== null) {
+                throw $exception;
+            }
+
+            throw $e;
+        }
 
         $this->streamState = new StreamState();
 
@@ -47,7 +63,19 @@ trait HandleStream
             }
 
             $toolContent = null;
-            foreach ($eventParserIterator as $event) {
+            foreach ($this->streamEvents($eventParserIterator) as $event) {
+                foreach ($event as $type => $eventPayload) {
+                    if ($type === 'error' || str_ends_with((string) $type, 'Exception')) {
+                        $exception = ProviderErrorClassifier::classifyStreamError(
+                            null,
+                            (string) json_encode([$type => $eventPayload])
+                        );
+
+                        if ($exception !== null) {
+                            throw $exception;
+                        }
+                    }
+                }
 
                 if (isset($event['metadata'])) {
                     $this->streamState->addInputTokens($event['metadata']['usage']['inputTokens'] ?? 0);
@@ -135,5 +163,32 @@ trait HandleStream
         $message->setUsage($this->streamState->getUsage());
 
         return $message;
+    }
+
+    /**
+     * @return Generator<int, array<string, mixed>>
+     */
+    protected function streamEvents(iterable $events): Generator
+    {
+        try {
+            yield from $events;
+        } catch (EventStreamDataException $e) {
+            $exception = ProviderErrorClassifier::classifyStreamError(
+                null,
+                (string) json_encode([
+                    'error' => [
+                        'code' => $e->getAwsErrorCode(),
+                        'message' => $e->getAwsErrorMessage(),
+                    ],
+                ]),
+                $e
+            );
+
+            if ($exception !== null) {
+                throw $exception;
+            }
+
+            throw $e;
+        }
     }
 }

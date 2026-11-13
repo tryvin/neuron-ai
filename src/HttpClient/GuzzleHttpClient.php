@@ -216,6 +216,11 @@ class GuzzleHttpClient implements HttpClientInterface
                 headers: $psrResponse->getHeaders(),
             );
 
+            $contextWindowException = ProviderErrorClassifier::classify($request, $response, $e);
+            if ($contextWindowException !== null) {
+                throw $contextWindowException;
+            }
+
             throw new HttpException(
                 "HTTP {$response->statusCode} error during {$request->method->value} {$request->uri}: {$response->body}",
                 $request,

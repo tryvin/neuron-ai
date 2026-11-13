@@ -13,14 +13,19 @@ use NeuronAI\Chat\Messages\Stream\Chunks\StreamChunk;
 use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
 use NeuronAI\Exceptions\HttpException;
 use NeuronAI\Exceptions\ProviderException;
+use NeuronAI\HttpClient\HttpRequest;
+use NeuronAI\HttpClient\ProviderErrorClassifier;
 use NeuronAI\HttpClient\StreamInterface;
 use NeuronAI\Providers\SSEParser;
 
 use function array_unshift;
+use function json_encode;
 
 trait HandleStream
 {
     protected StreamState $streamState;
+
+    protected ?HttpRequest $streamRequest = null;
 
     /**
      * Stream response from the LLM.
@@ -50,7 +55,7 @@ trait HandleStream
         }
 
         $stream = $this->httpClient->stream(
-            $this->createChatHttpRequest($body)
+            $this->streamRequest = $this->createChatHttpRequest($body)
         );
 
         $this->streamState = new StreamState();
@@ -66,6 +71,17 @@ trait HandleStream
         while (! $stream->eof()) {
             if (!$line = SSEParser::parseNextSSEEvent($stream)) {
                 continue;
+            }
+
+            if (isset($line['error']) || (($line['type'] ?? null) === 'error')) {
+                $exception = ProviderErrorClassifier::classifyStreamError(
+                    $this->streamRequest,
+                    (string) json_encode($line)
+                );
+
+                if ($exception !== null) {
+                    throw $exception;
+                }
             }
 
             $this->streamState->messageId($line['id'] ?? null);

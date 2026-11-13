@@ -13,6 +13,7 @@ use NeuronAI\Chat\Messages\Message;
 use NeuronAI\Chat\Messages\ToolCallMessage;
 use NeuronAI\Chat\Messages\Usage;
 use NeuronAI\Exceptions\ProviderException;
+use Throwable;
 
 use function base64_encode;
 
@@ -37,6 +38,15 @@ trait HandleChat
                 $message->setUsage($usage);
                 $message->setStopReason($stopReason);
                 return $message;
+            })
+            ->otherwise(function (Throwable $e): never {
+                $exception = $this->contextWindowException($e);
+
+                if ($exception !== null) {
+                    throw $exception;
+                }
+
+                throw $e;
             });
     }
 

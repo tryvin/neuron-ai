@@ -5,17 +5,23 @@ declare(strict_types=1);
 namespace NeuronAI\Providers\AWS;
 
 use Aws\BedrockRuntime\BedrockRuntimeClient;
+use Aws\Exception\AwsException;
+use NeuronAI\Exceptions\ContextWindowExceededException;
 use NeuronAI\Exceptions\ProviderException;
 use NeuronAI\HttpClient\HttpClientInterface;
+use NeuronAI\HttpClient\HttpResponse;
+use NeuronAI\HttpClient\ProviderErrorClassifier;
 use NeuronAI\Providers\AIProviderInterface;
 use NeuronAI\Providers\HandleWithTools;
 use NeuronAI\Providers\MessageMapperInterface;
 use NeuronAI\Providers\ToolMapperInterface;
 use NeuronAI\Tools\ToolInterface;
+use Throwable;
 
 use function count;
 use function is_string;
 use function json_decode;
+use function json_encode;
 
 class BedrockRuntime implements AIProviderInterface
 {
@@ -95,5 +101,24 @@ class BedrockRuntime implements AIProviderInterface
         // AWS BedrockRuntime uses its own BedrockRuntimeClient, not HTTP client
         // This method is a no-op to satisfy the AIProviderInterface
         return $this;
+    }
+
+    protected function contextWindowException(Throwable $e): ?ContextWindowExceededException
+    {
+        if (!$e instanceof AwsException || $e->getStatusCode() === null) {
+            return null;
+        }
+
+        $response = new HttpResponse(
+            statusCode: $e->getStatusCode(),
+            body: (string) json_encode([
+                'error' => [
+                    'code' => $e->getAwsErrorCode(),
+                    'message' => $e->getAwsErrorMessage() ?? $e->getMessage(),
+                ],
+            ])
+        );
+
+        return ProviderErrorClassifier::classify(null, $response, $e);
     }
 }

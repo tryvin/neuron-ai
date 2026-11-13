@@ -15,6 +15,7 @@ use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
 use NeuronAI\Exceptions\HttpException;
 use NeuronAI\Exceptions\ProviderException;
 use NeuronAI\HttpClient\HttpRequest;
+use NeuronAI\HttpClient\ProviderErrorClassifier;
 use NeuronAI\HttpClient\StreamInterface;
 use NeuronAI\Tools\ToolInterface;
 
@@ -70,12 +71,12 @@ trait HandleStream
             }
         }
 
-        $stream = $this->httpClient->stream(
-            HttpRequest::post(
-                uri: "{$this->model}:streamGenerateContent",
-                body: $body
-            )
+        $request = HttpRequest::post(
+            uri: "{$this->model}:streamGenerateContent",
+            body: $body
         );
+
+        $stream = $this->httpClient->stream($request);
 
         $this->streamState = new StreamState();
         $lastFinishReason = null;
@@ -88,6 +89,15 @@ trait HandleStream
             }
 
             if (array_key_exists('error', $line)) {
+                $exception = ProviderErrorClassifier::classifyStreamError(
+                    $request,
+                    (string) json_encode($line)
+                );
+
+                if ($exception !== null) {
+                    throw $exception;
+                }
+
                 throw new ProviderException("Gemini API Error (Streaming): " . ($line['error']['message'] ?? json_encode($line['error'])));
             }
 

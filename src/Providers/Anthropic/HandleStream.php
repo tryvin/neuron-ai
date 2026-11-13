@@ -14,7 +14,10 @@ use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
 use NeuronAI\Exceptions\HttpException;
 use NeuronAI\Exceptions\ProviderException;
 use NeuronAI\HttpClient\HttpRequest;
+use NeuronAI\HttpClient\ProviderErrorClassifier;
 use NeuronAI\Providers\SSEParser;
+
+use function json_encode;
 
 trait HandleStream
 {
@@ -32,12 +35,12 @@ trait HandleStream
      */
     public function stream(Message ...$messages): Generator
     {
-        $stream = $this->httpClient->stream(
-            HttpRequest::post(
-                uri: $this->requestUri(true),
-                body: $this->requestBody($messages, true)
-            )
+        $request = HttpRequest::post(
+            uri: $this->requestUri(true),
+            body: $this->requestBody($messages, true)
         );
+
+        $stream = $this->httpClient->stream($request);
 
         $this->streamState = new StreamState();
 
@@ -48,6 +51,17 @@ trait HandleStream
             }
 
             $eventType = $line['type'] ?? null;
+
+            if ($eventType === 'error') {
+                $exception = ProviderErrorClassifier::classifyStreamError(
+                    $request,
+                    (string) json_encode($line)
+                );
+
+                if ($exception !== null) {
+                    throw $exception;
+                }
+            }
 
             if ($eventType === 'message_start') {
                 $this->handleMessageStart($line['message']);

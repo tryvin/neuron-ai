@@ -16,10 +16,12 @@ use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
 use NeuronAI\Exceptions\HttpException;
 use NeuronAI\Exceptions\ProviderException;
 use NeuronAI\HttpClient\HttpRequest;
+use NeuronAI\HttpClient\ProviderErrorClassifier;
 use NeuronAI\HttpClient\StreamInterface;
 use Throwable;
 
 use function json_decode;
+use function json_encode;
 use function mb_strlen;
 use function str_contains;
 use function str_starts_with;
@@ -34,6 +36,8 @@ use const JSON_THROW_ON_ERROR;
 trait HandleStream
 {
     protected StreamState $streamState;
+
+    protected ?HttpRequest $streamRequest = null;
 
     /**
      * Stream response from the LLM.
@@ -61,7 +65,7 @@ trait HandleStream
         }
 
         $stream = $this->httpClient->stream(
-            HttpRequest::post(
+            $this->streamRequest = HttpRequest::post(
                 uri: 'responses',
                 body: $body
             )
@@ -72,6 +76,17 @@ trait HandleStream
         while (! $stream->eof()) {
             if (!$event = $this->parseNextDataLine($stream)) {
                 continue;
+            }
+
+            if (isset($event['error'])) {
+                $exception = ProviderErrorClassifier::classifyStreamError(
+                    $this->streamRequest,
+                    (string) json_encode($event)
+                );
+
+                if ($exception !== null) {
+                    throw $exception;
+                }
             }
 
             switch ($event['type']) {
@@ -147,6 +162,15 @@ trait HandleStream
                     return $message;
 
                 case 'response.failed':
+                    $exception = ProviderErrorClassifier::classifyStreamError(
+                        $this->streamRequest,
+                        (string) json_encode($event)
+                    );
+
+                    if ($exception !== null) {
+                        throw $exception;
+                    }
+
                     throw new ProviderException('OpenAI streaming error: ' . $event['response']['error']['message']);
 
                 default:
