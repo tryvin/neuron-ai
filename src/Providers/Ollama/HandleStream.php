@@ -54,18 +54,29 @@ trait HandleStream
         );
 
         $this->streamState = new StreamState();
+        $stopReason = null;
 
         while (! $stream->eof()) {
             if (!$line = $this->parseNextJson($stream)) {
                 continue;
             }
 
+            if (($line['done_reason'] ?? null) !== null) {
+                $stopReason = $line['done_reason'];
+            }
+
             // Process tool calls
             if (isset($line['message']['tool_calls'])) {
-                return $this->createToolCallMessage(
+                $message = $this->createToolCallMessage(
                     $line['message']['tool_calls'],
                     $this->streamState->getContentBlocks()
                 )->setUsage($this->streamState->getUsage());
+
+                if ($stopReason !== null) {
+                    $message->setStopReason($stopReason);
+                }
+
+                return $message;
             }
 
             if ($thinking = $line['message']['thinking'] ?? null) {
@@ -89,6 +100,10 @@ trait HandleStream
 
         $message = new AssistantMessage($this->streamState->getContentBlocks());
         $message->setUsage($this->streamState->getUsage());
+
+        if ($stopReason !== null) {
+            $message->setStopReason($stopReason);
+        }
 
         return $message;
     }

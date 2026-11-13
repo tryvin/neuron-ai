@@ -123,6 +123,9 @@ trait HandleStream
             $message = new AssistantMessage($this->streamState->getContentBlocks());
         }
 
+        if ($stopReason !== null) {
+            $message->setStopReason($stopReason);
+        }
         if ($redactedReasoning !== []) {
             $message->addMetadata('aws_redacted_reasoning', array_map(base64_encode(...), $redactedReasoning));
         }

@@ -9,7 +9,9 @@ use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Middleware;
 use GuzzleHttp\Psr7\Response;
 use NeuronAI\Chat\Enums\SourceType;
+use NeuronAI\Chat\Messages\AssistantMessage;
 use NeuronAI\Chat\Messages\ContentBlocks\ImageContent;
+use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronAI\Exceptions\ProviderException;
 use NeuronAI\HttpClient\GuzzleHttpClient;
@@ -20,6 +22,7 @@ use NeuronAI\Tools\ToolProperty;
 use PHPUnit\Framework\TestCase;
 
 use function json_decode;
+use function iterator_to_array;
 
 class OllamaTest extends TestCase
 {
@@ -190,5 +193,38 @@ class OllamaTest extends TestCase
         ];
 
         $this->assertSame($expectedRequest, json_decode((string) $request['request']->getBody()->getContents(), true));
+    }
+
+    public function test_stream_reports_done_reason(): void
+    {
+        $body = "{\"model\":\"llama3.2\",\"message\":{\"role\":\"assistant\",\"content\":\"Hello\"},\"done\":false}\n";
+        $body .= "{\"model\":\"llama3.2\",\"message\":{\"role\":\"assistant\",\"content\":\" world\"},\"done\":false}\n";
+        $body .= "{\"model\":\"llama3.2\",\"message\":{\"role\":\"assistant\",\"content\":\"\"},\"done_reason\":\"length\",\"done\":true,\"prompt_eval_count\":8,\"eval_count\":3}\n";
+
+        $provider = (new Ollama(
+            url: '',
+            model: 'llama3.2',
+        ))->setHttpClient(new GuzzleHttpClient(
+            handler: HandlerStack::create(new MockHandler([
+                new Response(status: 200, body: $body),
+            ]))
+        ));
+
+        $generator = $provider->stream(new UserMessage('Hi'));
+        $chunks = iterator_to_array($generator, false);
+        $message = $generator->getReturn();
+
+        $contents = [];
+        foreach ($chunks as $chunk) {
+            $this->assertInstanceOf(TextChunk::class, $chunk);
+            $contents[] = $chunk->content;
+        }
+
+        $this->assertSame(['Hello', ' world'], $contents);
+        $this->assertInstanceOf(AssistantMessage::class, $message);
+        $this->assertSame('Hello world', $message->getContent());
+        $this->assertSame('length', $message->stopReason());
+        $this->assertSame(8, $message->getUsage()->inputTokens);
+        $this->assertSame(3, $message->getUsage()->outputTokens);
     }
 }

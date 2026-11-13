@@ -81,6 +81,10 @@ trait HandleStream
 
             $choice = $line['choices'][0];
 
+            if (($choice['finish_reason'] ?? null) !== null) {
+                $this->streamState->addMetadata('stop_reason', $choice['finish_reason']);
+            }
+
             // Compile tool calls
             if (isset($choice['delta']['tool_calls'])) {
                 $this->streamState->composeToolCalls($line);

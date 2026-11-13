@@ -125,18 +125,26 @@ trait HandleStream
                      * Return the final message
                      */
                 case 'response.completed':
+                case 'response.incomplete':
                     $usage = $event['response']['usage'] ?? null;
                     if ($usage !== null) {
                         $this->streamState->setUsage($this->buildUsage($usage));
                     }
 
                     if ($this->streamState->hasToolCalls()) {
-                        return $this->createToolCallMessage(
+                        $message = $this->createToolCallMessage(
                             $this->streamState->getToolCalls(),
                             $this->streamState->getContentBlocks(),
                         )->setUsage($this->streamState->getUsage());
+                    } else {
+                        $message = $this->createAssistantMessage($event['response'])->setUsage($this->streamState->getUsage());
                     }
-                    return $this->createAssistantMessage($event['response'])->setUsage($this->streamState->getUsage());
+
+                    if (isset($event['response']['status'])) {
+                        $message->setStopReason($event['response']['status']);
+                    }
+
+                    return $message;
 
                 case 'response.failed':
                     throw new ProviderException('OpenAI streaming error: ' . $event['response']['error']['message']);
