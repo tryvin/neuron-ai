@@ -49,7 +49,9 @@ class WriteFileTool extends Tool
     public function __invoke(string $file_path, string $content): array
     {
         $dir = dirname($file_path);
-        if (!is_dir($dir) && !mkdir($dir, 0o755, true) && !is_dir($dir)) {
+        // Errors are reported through the return value; suppressed warnings
+        // would otherwise leak into logs for expected failure paths.
+        if (!is_dir($dir) && !@mkdir($dir, 0o755, true) && !is_dir($dir)) {
             return [
                 'status' => 'error',
                 'operation' => 'write_file',
@@ -67,7 +69,7 @@ class WriteFileTool extends Tool
             ];
         }
 
-        $result = file_put_contents($file_path, $content);
+        $result = @file_put_contents($file_path, $content);
 
         if ($result === false) {
             return [
