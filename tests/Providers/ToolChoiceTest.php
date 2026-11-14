@@ -7,14 +7,10 @@ namespace NeuronAI\Tests\Providers;
 use Aws\BedrockRuntime\BedrockRuntimeClient;
 use Aws\Result;
 use ArrayIterator;
-use GuzzleHttp\Handler\MockHandler;
-use GuzzleHttp\HandlerStack;
-use GuzzleHttp\Middleware;
 use GuzzleHttp\Promise\FulfilledPromise;
-use GuzzleHttp\Psr7\Response;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronAI\Exceptions\ProviderException;
-use NeuronAI\HttpClient\GuzzleHttpClient;
+use NeuronAI\HttpClient\HttpResponse;
 use NeuronAI\Providers\AIProviderInterface;
 use NeuronAI\Providers\Anthropic\Anthropic;
 use NeuronAI\Providers\AWS\BedrockRuntime;
@@ -24,11 +20,11 @@ use NeuronAI\Providers\Mistral\Mistral;
 use NeuronAI\Providers\Ollama\Ollama;
 use NeuronAI\Providers\OpenAI\OpenAI;
 use NeuronAI\Providers\OpenAI\Responses\OpenAIResponses;
+use NeuronAI\Testing\FakeHttpClient;
 use NeuronAI\Tools\Tool;
 use PHPUnit\Framework\TestCase;
 
 use function iterator_to_array;
-use function json_decode;
 
 class ToolChoiceTest extends TestCase
 {
@@ -243,13 +239,11 @@ class ToolChoiceTest extends TestCase
      */
     protected function chatPayload(AIProviderInterface $provider, string $body): array
     {
-        $history = [];
-        $stack = HandlerStack::create(new MockHandler([new Response(200, body: $body)]));
-        $stack->push(Middleware::history($history));
+        $client = FakeHttpClient::make()->queueResponse(new HttpResponse(200, $body));
 
-        $provider->setHttpClient(new GuzzleHttpClient(handler: $stack))->chat(new UserMessage('Hi'));
+        $provider->setHttpClient($client)->chat(new UserMessage('Hi'));
 
-        return (array) json_decode((string) $history[0]['request']->getBody(), true);
+        return (array) $client->requests()[0]->body;
     }
 
     /**
@@ -257,15 +251,12 @@ class ToolChoiceTest extends TestCase
      */
     protected function streamPayload(AIProviderInterface $provider): array
     {
-        $history = [];
-        $stack = HandlerStack::create(new MockHandler([new Response(200, body: '')]));
-        $stack->push(Middleware::history($history));
+        $client = FakeHttpClient::make()->queueSse();
 
-        $stream = $provider->setHttpClient(new GuzzleHttpClient(handler: $stack))
-            ->stream(new UserMessage('Hi'));
+        $stream = $provider->setHttpClient($client)->stream(new UserMessage('Hi'));
         iterator_to_array($stream, false);
 
-        return (array) json_decode((string) $history[0]['request']->getBody(), true);
+        return (array) $client->requests()[0]->body;
     }
 
     /**

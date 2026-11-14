@@ -4,10 +4,6 @@ declare(strict_types=1);
 
 namespace NeuronAI\Tests\Agent\Nodes;
 
-use GuzzleHttp\Handler\MockHandler;
-use GuzzleHttp\HandlerStack;
-use GuzzleHttp\Middleware;
-use GuzzleHttp\Psr7\Response;
 use NeuronAI\Agent\AgentState;
 use NeuronAI\Agent\Events\AIInferenceEvent;
 use NeuronAI\Agent\Nodes\ChatNode;
@@ -15,15 +11,17 @@ use NeuronAI\Agent\Nodes\StreamingNode;
 use NeuronAI\Agent\Nodes\StructuredOutputNode;
 use NeuronAI\Chat\Messages\AssistantMessage;
 use NeuronAI\Chat\Messages\UserMessage;
-use NeuronAI\HttpClient\GuzzleHttpClient;
+use NeuronAI\HttpClient\HttpResponse;
 use NeuronAI\Providers\OpenAI\OpenAI;
 use NeuronAI\Testing\FakeAIProvider;
+use NeuronAI\Testing\FakeHttpClient;
 use NeuronAI\Tests\Stubs\StructuredOutput\ToolChoiceOutput;
 use NeuronAI\Tests\Stubs\ToolChoiceSpyProvider;
 use NeuronAI\Tools\Tool;
 use PHPUnit\Framework\TestCase;
 
 use function json_decode;
+use function json_encode;
 
 class ToolChoiceNodeTest extends TestCase
 {
@@ -141,15 +139,13 @@ class ToolChoiceNodeTest extends TestCase
      */
     protected function openAiChatPayload(bool $throughNode): array
     {
-        $sentRequests = [];
-        $stack = HandlerStack::create(new MockHandler([
-            new Response(200, body: '{"choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"ok"}}]}'),
-        ]));
-        $stack->push(Middleware::history($sentRequests));
+        $client = FakeHttpClient::make()->queueResponse(
+            new HttpResponse(200, '{"choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"ok"}}]}')
+        );
 
         $provider = (new OpenAI('', 'gpt-4o'))
             ->setTools([Tool::make('lookup', 'Look it up')])
-            ->setHttpClient(new GuzzleHttpClient(handler: $stack));
+            ->setHttpClient($client);
 
         if ($throughNode) {
             $event = new AIInferenceEvent('Answer in text only.', [Tool::make('lookup', 'Look it up')]);
@@ -163,6 +159,6 @@ class ToolChoiceNodeTest extends TestCase
             $provider->systemPrompt('Answer in text only.')->chat(new UserMessage('Hi'));
         }
 
-        return json_decode((string) $sentRequests[0]['request']->getBody(), true);
+        return (array) json_decode((string) json_encode($client->requests()[0]->body), true);
     }
 }
