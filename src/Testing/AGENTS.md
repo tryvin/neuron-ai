@@ -13,6 +13,8 @@ Test fakes and utilities for testing Neuron applications.
 | `FakeMcpTransport` | Mock MCP transport, record send/receive |
 | `FakeMessageMapper` | Mock message mapping |
 | `FakeToolMapper` | Mock tool mapping |
+| `RecordingObserver` | Record EventBus emissions with assertions |
+| `WorkflowTester` | Run/resume workflows through interrupts |
 
 ## FakeAIProvider Usage
 
@@ -69,6 +71,46 @@ $provider->getRecorded('chat');          // records for one method only
 |-------|---------|
 | `RequestRecord` | Captured request details |
 | `MiddlewareRecord` | Captured middleware execution |
+| `RunResult` | Outcome of a `WorkflowTester` run (state or interrupt) |
+
+## RecordingObserver Usage
+
+Records every event emitted through the EventBus. Node events are scoped to
+the workflow ID, so attach the observer to the workflow before running it —
+a globally registered observer records nothing:
+
+```php
+$observer = RecordingObserver::for($workflow);
+$workflow->init()->run();
+
+$observer->assertEmitted('workflow-start');
+$observer->assertNotEmitted('workflow-interrupt');
+$observer->assertEmittedInOrder('workflow-start', 'workflow-end');
+$observer->ofClass(InferenceStart::class); // event DTOs by class
+$observer->names();                        // ordered event names
+```
+
+Cleanup: either call `$observer->detach()` yourself, or use the
+`InteractsWithEventBus` trait, which clears the bus after every test so
+observers never leak between tests. Both approaches are equivalent — pick one.
+
+## WorkflowTester Usage
+
+Drives a workflow (or agent) to completion or to its next interrupt without
+the catch-inspect-resume boilerplate. Streamed events are consumed silently:
+
+```php
+$result = WorkflowTester::run($workflow);
+$result->assertInterrupted();
+$request = $result->interruptRequest(); // e.g. ApprovalRequest
+
+$result = WorkflowTester::resume($workflow, $request);
+$result->assertCompleted();
+$result->state->get('received_feedback');
+```
+
+When a test needs the streamed chunks themselves, iterate the workflow
+generator directly instead of using the tester.
 
 ## FakeMcpTransport Usage
 
@@ -95,3 +137,5 @@ $transport->assertToolCalled('search');
 
 - `Providers` module (implements interfaces)
 - `MCP` module (`FakeMcpTransport` implements `McpTransportInterface`)
+- `Workflow` module (`WorkflowTester` drives `Workflow::init()->run()`)
+- `Observability` module (`RecordingObserver` implements `ObserverInterface`)
