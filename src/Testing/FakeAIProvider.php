@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace NeuronAI\Testing;
 
 use Generator;
+use NeuronAI\Chat\Messages\AssistantMessage;
 use NeuronAI\Chat\Messages\Message;
 use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
+use NeuronAI\Chat\Messages\ToolCallMessage;
 use NeuronAI\Exceptions\ProviderException;
 use NeuronAI\HttpClient\HttpClientInterface;
 use NeuronAI\Providers\AIProviderInterface;
@@ -17,8 +19,10 @@ use NeuronAI\Providers\SupportsToolChoice;
 use NeuronAI\Providers\ToolMapperInterface;
 use NeuronAI\StaticConstructor;
 use NeuronAI\Tools\ProviderToolInterface;
+use NeuronAI\Tools\Tool;
 use NeuronAI\Tools\ToolInterface;
 use PHPUnit\Framework\Assert;
+use Throwable;
 
 use function array_map;
 use function array_shift;
@@ -26,6 +30,7 @@ use function array_values;
 use function count;
 use function implode;
 use function is_array;
+use function json_encode;
 use function mb_strlen;
 use function mb_substr;
 use function uniqid;
@@ -38,7 +43,7 @@ class FakeAIProvider implements AIProviderInterface, SupportsToolChoice
 
     protected ?string $systemPrompt = null;
 
-    /** @var Message[] */
+    /** @var array<Message|Throwable> */
     protected array $responseQueue;
 
     /** @var RequestRecord[] */
@@ -47,9 +52,10 @@ class FakeAIProvider implements AIProviderInterface, SupportsToolChoice
     protected int $streamChunkSize = 5;
 
     /**
-     * @param Message ...$responses Predetermined responses to return sequentially
+     * @param Message|Throwable ...$responses Predetermined responses to return sequentially.
+     *        A Throwable is thrown at call time to simulate provider failures.
      */
-    public function __construct(Message ...$responses)
+    public function __construct(Message|Throwable ...$responses)
     {
         $this->responseQueue = $responses;
     }
@@ -62,6 +68,7 @@ class FakeAIProvider implements AIProviderInterface, SupportsToolChoice
 
     /**
      * @throws ProviderException
+     * @throws Throwable The queued exception, if the next queue item is a Throwable
      */
     public function chat(Message ...$messages): Message
     {
@@ -75,12 +82,17 @@ class FakeAIProvider implements AIProviderInterface, SupportsToolChoice
             toolChoice: $this->toolChoice,
         );
 
+        if ($response instanceof Throwable) {
+            throw $response;
+        }
+
         return $response;
     }
 
     /**
      * @return Generator<int, TextChunk, mixed, Message>
      * @throws ProviderException
+     * @throws Throwable The queued exception, if the next queue item is a Throwable
      */
     public function stream(Message ...$messages): Generator
     {
@@ -95,6 +107,10 @@ class FakeAIProvider implements AIProviderInterface, SupportsToolChoice
             tools: $this->tools,
             toolChoice: $this->toolChoice,
         );
+
+        if ($response instanceof Throwable) {
+            throw $response;
+        }
 
         return $this->streamChunks($response);
     }
@@ -122,6 +138,7 @@ class FakeAIProvider implements AIProviderInterface, SupportsToolChoice
      * @param Message|Message[] $messages
      * @param array<string, mixed> $response_schema
      * @throws ProviderException
+     * @throws Throwable The queued exception, if the next queue item is a Throwable
      */
     public function structured(array|Message $messages, string $class, array $response_schema): Message
     {
@@ -138,6 +155,10 @@ class FakeAIProvider implements AIProviderInterface, SupportsToolChoice
             structuredSchema: $response_schema,
             toolChoice: $this->toolChoice,
         );
+
+        if ($response instanceof Throwable) {
+            throw $response;
+        }
 
         return $response;
     }
@@ -159,13 +180,42 @@ class FakeAIProvider implements AIProviderInterface, SupportsToolChoice
 
     /**
      * Add more responses to the queue.
+     *
+     * @param Message|Throwable ...$responses A Throwable is thrown at call time.
      */
-    public function addResponses(Message ...$responses): self
+    public function addResponses(Message|Throwable ...$responses): self
     {
         foreach ($responses as $response) {
             $this->responseQueue[] = $response;
         }
         return $this;
+    }
+
+    /**
+     * Queue a tool call response, as if the model asked to call a tool.
+     *
+     * @param array<string, mixed> $inputs The arguments the model passes to the tool
+     */
+    public function addToolCallResponse(string $toolName, array $inputs = []): self
+    {
+        return $this->addResponses(
+            new ToolCallMessage(null, [Tool::make($toolName)->setInputs($inputs)])
+        );
+    }
+
+    /**
+     * Queue a structured output response by encoding the given data as JSON.
+     *
+     * The encoded message still goes through the real deserializer and validator,
+     * so use values that satisfy the target class.
+     *
+     * @param object|array<string, mixed> $data
+     */
+    public function addStructuredResponse(object|array $data): self
+    {
+        return $this->addResponses(
+            new AssistantMessage((string) json_encode($data))
+        );
     }
 
     /**
@@ -309,7 +359,10 @@ class FakeAIProvider implements AIProviderInterface, SupportsToolChoice
         Assert::assertTrue($matched, 'No recorded request had the expected tool choice.');
     }
 
-    protected function nextResponse(): Message
+    /**
+     * @return Message|Throwable
+     */
+    protected function nextResponse(): Message|Throwable
     {
         if ($this->responseQueue === []) {
             throw new ProviderException(

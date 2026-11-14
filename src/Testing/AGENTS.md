@@ -35,6 +35,20 @@ The provider implements `SupportsToolChoice`, so a `toolChoice` set on
 $provider->assertToolChoice('none');
 ```
 
+Responses can also simulate failures and tool calls:
+
+```php
+// Throws at call time (retry/error-path testing); the attempt is still recorded.
+$provider->addResponses(new ProviderException('rate limited'), new AssistantMessage('OK'));
+
+// Queues a ToolCallMessage asking for the given tool.
+$provider->addToolCallResponse('search', ['city' => 'Rome']);
+
+// Queues a JSON-encoded message for structured output; the real
+// deserializer and validator still run, so provide valid data.
+$provider->addStructuredResponse(['firstName' => 'Ada']);
+```
+
 **PHP Generator Gotcha**: `FakeAIProvider::stream()` uses separate `streamChunks()` method to ensure side effects execute. See project memory for details.
 
 ## Record Types

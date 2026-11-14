@@ -6,12 +6,14 @@ namespace NeuronAI\Tests\Testing;
 
 use NeuronAI\Chat\Messages\AssistantMessage;
 use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
+use NeuronAI\Chat\Messages\ToolCallMessage;
 use NeuronAI\Chat\Messages\Usage;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronAI\Exceptions\ProviderException;
 use NeuronAI\HttpClient\HttpClientInterface;
 use NeuronAI\Providers\SupportsToolChoice;
 use NeuronAI\Testing\FakeAIProvider;
+use NeuronAI\Tests\Stubs\StructuredOutput\Person;
 use NeuronAI\Testing\FakeMessageMapper;
 use NeuronAI\Testing\FakeToolMapper;
 use NeuronAI\Testing\RequestRecord;
@@ -396,5 +398,68 @@ class FakeAIProviderTest extends TestCase
         $this->expectException(AssertionFailedError::class);
 
         $provider->assertToolChoice('none');
+    }
+
+    public function test_queued_exception_is_thrown_and_attempt_recorded(): void
+    {
+        $provider = new FakeAIProvider(new ProviderException('boom'), new AssistantMessage('recovered'));
+
+        try {
+            $provider->chat(new UserMessage('1'));
+            $this->fail('Expected the queued exception to be thrown.');
+        } catch (ProviderException $exception) {
+            $this->assertSame('boom', $exception->getMessage());
+        }
+
+        $this->assertSame('recovered', $provider->chat(new UserMessage('2'))->getContent());
+        $this->assertCount(2, $provider->getRecorded());
+    }
+
+    public function test_queued_exception_is_thrown_by_stream_eagerly(): void
+    {
+        $provider = new FakeAIProvider(new ProviderException('stream boom'));
+
+        // The exception must be raised by stream() itself, not only on iteration.
+        $this->expectException(ProviderException::class);
+        $this->expectExceptionMessage('stream boom');
+
+        $provider->stream(new UserMessage('Hi'));
+    }
+
+    public function test_queued_exception_is_thrown_by_structured_and_recorded(): void
+    {
+        $provider = new FakeAIProvider(new ProviderException('structured boom'));
+
+        try {
+            $provider->structured(new UserMessage('Hi'), 'TestClass', []);
+            $this->fail('Expected the queued exception to be thrown.');
+        } catch (ProviderException $exception) {
+            $this->assertSame('structured boom', $exception->getMessage());
+        }
+
+        $this->assertSame('structured', $provider->getRecorded()[0]->method);
+    }
+
+    public function test_add_tool_call_response_queues_tool_call_message(): void
+    {
+        $provider = new FakeAIProvider();
+        $provider->addToolCallResponse('search', ['city' => 'Rome']);
+
+        $response = $provider->chat(new UserMessage('Weather in Rome?'));
+
+        $this->assertInstanceOf(ToolCallMessage::class, $response);
+        $tools = $response->getTools();
+        $this->assertSame('search', $tools[0]->getName());
+        $this->assertSame(['city' => 'Rome'], $tools[0]->getInputs());
+    }
+
+    public function test_add_structured_response_encodes_data_as_json(): void
+    {
+        $provider = new FakeAIProvider();
+        $provider->addStructuredResponse(['firstName' => 'Ada', 'lastName' => 'Lovelace']);
+
+        $response = $provider->structured(new UserMessage('Who?'), Person::class, []);
+
+        $this->assertSame('{"firstName":"Ada","lastName":"Lovelace"}', $response->getContent());
     }
 }
