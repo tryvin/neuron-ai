@@ -5,7 +5,11 @@ declare(strict_types=1);
 namespace NeuronAI\Tests\Testing;
 
 use NeuronAI\Chat\Messages\AssistantMessage;
+use NeuronAI\Chat\Messages\ContentBlocks\ReasoningContent;
+use NeuronAI\Chat\Messages\ContentBlocks\TextContent;
+use NeuronAI\Chat\Messages\Stream\Chunks\ReasoningChunk;
 use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
+use NeuronAI\Chat\Messages\Stream\Chunks\ToolCallChunk;
 use NeuronAI\Chat\Messages\ToolCallMessage;
 use NeuronAI\Chat\Messages\Usage;
 use NeuronAI\Chat\Messages\UserMessage;
@@ -461,5 +465,88 @@ class FakeAIProviderTest extends TestCase
         $response = $provider->structured(new UserMessage('Who?'), Person::class, []);
 
         $this->assertSame('{"firstName":"Ada","lastName":"Lovelace"}', $response->getContent());
+    }
+
+    public function test_stream_emits_tool_call_chunks_for_tool_call_message(): void
+    {
+        $provider = new FakeAIProvider();
+        $provider->addToolCallResponse('search', ['city' => 'Rome']);
+
+        $stream = $provider->stream(new UserMessage('Weather?'));
+
+        $chunks = [];
+        foreach ($stream as $chunk) {
+            $chunks[] = $chunk;
+        }
+
+        $this->assertCount(1, $chunks);
+        $this->assertInstanceOf(ToolCallChunk::class, $chunks[0]);
+        $this->assertSame('search', $chunks[0]->tool->getName());
+        $this->assertInstanceOf(ToolCallMessage::class, $stream->getReturn());
+    }
+
+    public function test_stream_emits_reasoning_chunks_before_text(): void
+    {
+        $response = new AssistantMessage([
+            new ReasoningContent('thinking'),
+            new TextContent('Hello!'),
+        ]);
+
+        $provider = new FakeAIProvider($response);
+        $provider->setStreamChunkSize(5);
+
+        $chunks = [];
+        foreach ($provider->stream(new UserMessage('Hi')) as $chunk) {
+            $chunks[] = $chunk;
+        }
+
+        $this->assertInstanceOf(ReasoningChunk::class, $chunks[0]);
+        $this->assertSame('thinking', $chunks[0]->content);
+        $this->assertInstanceOf(TextChunk::class, $chunks[1]);
+        $this->assertSame('Hello', $chunks[1]->content);
+        $this->assertSame('!', $chunks[2]->content);
+    }
+
+    public function test_stream_message_id_is_injectable(): void
+    {
+        $provider = new FakeAIProvider(new AssistantMessage('Hello!'));
+        $provider->setStreamMessageId('msg_fixed');
+
+        foreach ($provider->stream(new UserMessage('Hi')) as $chunk) {
+            $this->assertSame('msg_fixed', $chunk->messageId);
+        }
+    }
+
+    public function test_get_recorded_filters_by_method(): void
+    {
+        $provider = new FakeAIProvider(new AssistantMessage('a'), new AssistantMessage('b'));
+        $provider->chat(new UserMessage('1'));
+        $provider->stream(new UserMessage('2'));
+
+        $this->assertCount(2, $provider->getRecorded());
+        $this->assertCount(1, $provider->getRecorded('chat'));
+        $this->assertSame('chat', $provider->getRecorded('chat')[0]->method);
+        $this->assertSame('stream', $provider->getRecorded('stream')[0]->method);
+    }
+
+    public function test_assert_all_responses_consumed_passes_when_queue_is_empty(): void
+    {
+        $provider = new FakeAIProvider(new AssistantMessage('OK'));
+        $provider->chat(new UserMessage('Hi'));
+
+        $provider->assertAllResponsesConsumed();
+
+        $this->addToAssertionCount(1);
+    }
+
+    public function test_assert_all_responses_consumed_fails_when_queue_has_items(): void
+    {
+        $provider = new FakeAIProvider(new AssistantMessage('a'), new AssistantMessage('b'));
+        $provider->chat(new UserMessage('Hi'));
+
+        $this->expectException(AssertionFailedError::class);
+        $this->expectExceptionMessage('1 were left');
+
+        $provider->assertAllResponsesConsumed();
     }
 }

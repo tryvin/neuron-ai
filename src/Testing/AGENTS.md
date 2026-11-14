@@ -49,6 +49,18 @@ $provider->addToolCallResponse('search', ['city' => 'Rome']);
 $provider->addStructuredResponse(['firstName' => 'Ada']);
 ```
 
+Streaming fidelity: reasoning blocks stream as `ReasoningChunk` before the
+text, and a queued `ToolCallMessage` streams one `ToolCallChunk` per tool
+before the generator returns the message. Use `setStreamMessageId()` for
+deterministic chunk IDs in snapshot tests.
+
+Queue strictness and filtering:
+
+```php
+$provider->assertAllResponsesConsumed(); // no over-provisioned queue
+$provider->getRecorded('chat');          // records for one method only
+```
+
 **PHP Generator Gotcha**: `FakeAIProvider::stream()` uses separate `streamChunks()` method to ensure side effects execute. See project memory for details.
 
 ## Record Types

@@ -6,8 +6,11 @@ namespace NeuronAI\Testing;
 
 use Generator;
 use NeuronAI\Chat\Messages\AssistantMessage;
+use NeuronAI\Chat\Messages\ContentBlocks\ReasoningContent;
 use NeuronAI\Chat\Messages\Message;
+use NeuronAI\Chat\Messages\Stream\Chunks\ReasoningChunk;
 use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
+use NeuronAI\Chat\Messages\Stream\Chunks\ToolCallChunk;
 use NeuronAI\Chat\Messages\ToolCallMessage;
 use NeuronAI\Exceptions\ProviderException;
 use NeuronAI\HttpClient\HttpClientInterface;
@@ -34,6 +37,7 @@ use function json_encode;
 use function mb_strlen;
 use function mb_substr;
 use function uniqid;
+use function array_filter;
 
 class FakeAIProvider implements AIProviderInterface, SupportsToolChoice
 {
@@ -50,6 +54,8 @@ class FakeAIProvider implements AIProviderInterface, SupportsToolChoice
     protected array $recorded = [];
 
     protected int $streamChunkSize = 5;
+
+    protected ?string $streamMessageId = null;
 
     /**
      * @param Message|Throwable ...$responses Predetermined responses to return sequentially.
@@ -116,12 +122,20 @@ class FakeAIProvider implements AIProviderInterface, SupportsToolChoice
     }
 
     /**
-     * @return Generator<int, TextChunk, mixed, Message>
+     * @return Generator<int, TextChunk|ReasoningChunk|ToolCallChunk, mixed, Message>
      */
     protected function streamChunks(Message $response): Generator
     {
+        $messageId = $this->streamMessageId ?? uniqid('fake_msg_');
+
+        // Reasoning blocks stream before the visible text, as real providers do.
+        foreach ($response->getContentBlocks() as $block) {
+            if ($block instanceof ReasoningContent) {
+                yield new ReasoningChunk($messageId, $block->content);
+            }
+        }
+
         $text = $response->getContent() ?? '';
-        $messageId = uniqid('fake_msg_');
         $offset = 0;
         $length = mb_strlen($text);
 
@@ -129,6 +143,14 @@ class FakeAIProvider implements AIProviderInterface, SupportsToolChoice
             $chunk = mb_substr($text, $offset, $this->streamChunkSize);
             yield new TextChunk($messageId, $chunk);
             $offset += $this->streamChunkSize;
+        }
+
+        // Tool call messages stream one chunk per requested tool, mirroring
+        // the shape real providers use mid-stream.
+        if ($response instanceof ToolCallMessage) {
+            foreach ($response->getTools() as $tool) {
+                yield new ToolCallChunk($tool);
+            }
         }
 
         return $response;
@@ -228,11 +250,29 @@ class FakeAIProvider implements AIProviderInterface, SupportsToolChoice
     }
 
     /**
+     * Set a deterministic message ID for stream chunks. Use it when tests
+     * assert chunk IDs or snapshot streamed output; IDs are random otherwise.
+     */
+    public function setStreamMessageId(string $messageId): self
+    {
+        $this->streamMessageId = $messageId;
+        return $this;
+    }
+
+    /**
+     * @param string|null $method Filter records by method: 'chat', 'stream', or 'structured'
      * @return RequestRecord[]
      */
-    public function getRecorded(): array
+    public function getRecorded(?string $method = null): array
     {
-        return $this->recorded;
+        if ($method === null) {
+            return $this->recorded;
+        }
+
+        return array_values(array_filter(
+            $this->recorded,
+            static fn (RequestRecord $record): bool => $record->method === $method
+        ));
     }
 
     public function getCallCount(): int
@@ -277,6 +317,21 @@ class FakeAIProvider implements AIProviderInterface, SupportsToolChoice
         Assert::assertEmpty(
             $this->recorded,
             'Expected no provider calls, but ' . count($this->recorded) . ' were recorded.'
+        );
+    }
+
+    /**
+     * Assert every queued response was consumed. Catches tests that queue more
+     * responses than the agent actually needed.
+     */
+    public function assertAllResponsesConsumed(): void
+    {
+        $remaining = count($this->responseQueue);
+
+        Assert::assertSame(
+            0,
+            $remaining,
+            "Expected all queued responses to be consumed, but {$remaining} were left."
         );
     }
 
