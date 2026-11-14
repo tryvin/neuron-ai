@@ -69,7 +69,14 @@ class EventBus
         $branchId ??= '__main__';
 
         if (!isset(self::$initialized[$scope]) || !self::$initialized[$scope]) {
-            self::observe(self::$defaultObserver ?? InspectorObserver::instance(), $workflowId);
+            if (self::$defaultObserver !== null) {
+                self::observe(self::$defaultObserver, $workflowId);
+            } elseif (($_ENV['INSPECTOR_INGESTION_KEY'] ?? '') !== '') {
+                // Zero-config Inspector integration: attach the observer only
+                // when an ingestion key is configured. Otherwise the fallback
+                // would instantiate telemetry for every emit — including tests.
+                self::observe(InspectorObserver::instance(), $workflowId);
+            }
         }
 
         if ($workflowId !== null) {
