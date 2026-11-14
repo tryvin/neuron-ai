@@ -10,6 +10,7 @@ use NeuronAI\Chat\Messages\Usage;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronAI\Exceptions\ProviderException;
 use NeuronAI\HttpClient\HttpClientInterface;
+use NeuronAI\Providers\SupportsToolChoice;
 use NeuronAI\Testing\FakeAIProvider;
 use NeuronAI\Testing\FakeMessageMapper;
 use NeuronAI\Testing\FakeToolMapper;
@@ -337,5 +338,63 @@ class FakeAIProviderTest extends TestCase
 
         $this->assertSame(10, $message->getUsage()->inputTokens);
         $this->assertSame(20, $message->getUsage()->outputTokens);
+    }
+
+    public function test_fake_supports_tool_choice_capability(): void
+    {
+        $provider = new FakeAIProvider(new AssistantMessage('OK'));
+
+        $this->assertInstanceOf(SupportsToolChoice::class, $provider);
+        $this->assertSame($provider, $provider->toolChoice('none'));
+    }
+
+    public function test_tool_choice_is_recorded_per_call(): void
+    {
+        $provider = new FakeAIProvider(new AssistantMessage('a'), new AssistantMessage('b'));
+        $provider->toolChoice('none');
+        $provider->chat(new UserMessage('1'));
+
+        $provider->toolChoice(['type' => 'function', 'name' => 'search']);
+        $provider->chat(new UserMessage('2'));
+
+        $this->assertSame('none', $provider->getRecorded()[0]->toolChoice);
+        $this->assertSame(['type' => 'function', 'name' => 'search'], $provider->getRecorded()[1]->toolChoice);
+    }
+
+    public function test_tool_choice_defaults_to_null_when_not_set(): void
+    {
+        $provider = new FakeAIProvider(new AssistantMessage('OK'));
+        $provider->chat(new UserMessage('Hi'));
+
+        $this->assertNull($provider->getRecorded()[0]->toolChoice);
+    }
+
+    public function test_invalid_tool_choice_is_rejected(): void
+    {
+        $provider = new FakeAIProvider();
+
+        $this->expectException(ProviderException::class);
+        $provider->toolChoice('sometimes');
+    }
+
+    public function test_assert_tool_choice_passes_when_recorded(): void
+    {
+        $provider = new FakeAIProvider(new AssistantMessage('OK'));
+        $provider->toolChoice('none');
+        $provider->chat(new UserMessage('Hi'));
+
+        $provider->assertToolChoice('none');
+
+        $this->addToAssertionCount(1);
+    }
+
+    public function test_assert_tool_choice_fails_when_not_recorded(): void
+    {
+        $provider = new FakeAIProvider(new AssistantMessage('OK'));
+        $provider->chat(new UserMessage('Hi'));
+
+        $this->expectException(AssertionFailedError::class);
+
+        $provider->assertToolChoice('none');
     }
 }

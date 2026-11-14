@@ -18,14 +18,21 @@ Test fakes and utilities for testing Neuron applications.
 
 ```php
 $provider = new FakeAIProvider();
-$provider->addResponse(new AssistantMessage('Hello!'));
+$provider->addResponses(new AssistantMessage('Hello!'));
 
 $agent = Agent::make()->withProvider($provider);
 $response = $agent->chat(new UserMessage('Hi'));
 
 // Verify calls
-$provider->assertCalled();
-$provider->assertCalledTimes(1);
+$provider->assertCallCount(1);
+$provider->assertMethodCallCount('chat', 1);
+```
+
+The provider implements `SupportsToolChoice`, so a `toolChoice` set on
+`AIInferenceEvent` is recorded per call and can be asserted:
+
+```php
+$provider->assertToolChoice('none');
 ```
 
 **PHP Generator Gotcha**: `FakeAIProvider::stream()` uses separate `streamChunks()` method to ensure side effects execute. See project memory for details.

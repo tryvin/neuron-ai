@@ -11,7 +11,9 @@ use NeuronAI\Exceptions\ProviderException;
 use NeuronAI\HttpClient\HttpClientInterface;
 use NeuronAI\Providers\AIProviderInterface;
 use NeuronAI\Providers\HandleWithTools;
+use NeuronAI\Providers\HasToolChoice;
 use NeuronAI\Providers\MessageMapperInterface;
+use NeuronAI\Providers\SupportsToolChoice;
 use NeuronAI\Providers\ToolMapperInterface;
 use NeuronAI\StaticConstructor;
 use NeuronAI\Tools\ProviderToolInterface;
@@ -28,10 +30,11 @@ use function mb_strlen;
 use function mb_substr;
 use function uniqid;
 
-class FakeAIProvider implements AIProviderInterface
+class FakeAIProvider implements AIProviderInterface, SupportsToolChoice
 {
     use StaticConstructor;
     use HandleWithTools;
+    use HasToolChoice;
 
     protected ?string $systemPrompt = null;
 
@@ -69,6 +72,7 @@ class FakeAIProvider implements AIProviderInterface
             messages: $messages,
             systemPrompt: $this->systemPrompt,
             tools: $this->tools,
+            toolChoice: $this->toolChoice,
         );
 
         return $response;
@@ -89,6 +93,7 @@ class FakeAIProvider implements AIProviderInterface
             messages: $messages,
             systemPrompt: $this->systemPrompt,
             tools: $this->tools,
+            toolChoice: $this->toolChoice,
         );
 
         return $this->streamChunks($response);
@@ -131,6 +136,7 @@ class FakeAIProvider implements AIProviderInterface
             tools: $this->tools,
             structuredClass: $class,
             structuredSchema: $response_schema,
+            toolChoice: $this->toolChoice,
         );
 
         return $response;
@@ -282,6 +288,25 @@ class FakeAIProvider implements AIProviderInterface
         }
 
         Assert::assertTrue($matched, 'No recorded request had the expected tools configured: ' . implode(', ', $toolNames));
+    }
+
+    /**
+     * Assert a tool choice was set on at least one call.
+     *
+     * @param string|array{type: string, name?: string} $expected
+     */
+    public function assertToolChoice(string|array $expected): void
+    {
+        $matched = false;
+
+        foreach ($this->recorded as $record) {
+            if ($record->toolChoice === $expected) {
+                $matched = true;
+                break;
+            }
+        }
+
+        Assert::assertTrue($matched, 'No recorded request had the expected tool choice.');
     }
 
     protected function nextResponse(): Message

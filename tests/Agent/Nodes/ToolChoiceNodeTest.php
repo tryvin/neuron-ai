@@ -13,9 +13,11 @@ use NeuronAI\Agent\Events\AIInferenceEvent;
 use NeuronAI\Agent\Nodes\ChatNode;
 use NeuronAI\Agent\Nodes\StreamingNode;
 use NeuronAI\Agent\Nodes\StructuredOutputNode;
+use NeuronAI\Chat\Messages\AssistantMessage;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronAI\HttpClient\GuzzleHttpClient;
 use NeuronAI\Providers\OpenAI\OpenAI;
+use NeuronAI\Testing\FakeAIProvider;
 use NeuronAI\Tests\Stubs\StructuredOutput\ToolChoiceOutput;
 use NeuronAI\Tests\Stubs\ToolChoiceSpyProvider;
 use NeuronAI\Tools\Tool;
@@ -109,6 +111,20 @@ class ToolChoiceNodeTest extends TestCase
         $node($event, $state);
 
         $this->assertSame(['none', 'auto'], $provider->toolChoices);
+    }
+
+    public function test_chat_node_forwards_tool_choice_to_fake_provider(): void
+    {
+        $provider = new FakeAIProvider(new AssistantMessage('ok'));
+        $event = $this->event('none');
+        $state = new AgentState();
+
+        $node = new ChatNode($provider);
+        $node->setWorkflowContext($state, $event);
+        $node($event, $state);
+
+        $this->assertSame('none', $provider->getRecorded()[0]->toolChoice);
+        $provider->assertToolChoice('none');
     }
 
     protected function event(string $toolChoice): AIInferenceEvent
