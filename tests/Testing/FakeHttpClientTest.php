@@ -7,12 +7,15 @@ namespace NeuronAI\Tests\Testing;
 use NeuronAI\Exceptions\HttpException;
 use NeuronAI\Exceptions\ProviderException;
 use NeuronAI\HttpClient\HttpRequest;
+use NeuronAI\HttpClient\HttpResponse;
 use NeuronAI\Providers\OpenAI\OpenAI;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronAI\Testing\FakeHttpClient;
 use NeuronAI\Testing\FakeStream;
 use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\TestCase;
+
+use function iterator_to_array;
 
 class FakeHttpClientTest extends TestCase
 {
@@ -165,5 +168,52 @@ class FakeHttpClientTest extends TestCase
         $this->assertTrue($stream->eof());
 
         $stream->close();
+    }
+
+    public function test_fake_stream_throws_on_exhaustion(): void
+    {
+        $failure = new HttpException('upstream reset');
+        $stream = new FakeStream("data: {\"choices\":[]}\n", $failure);
+
+        // Serving content works...
+        $this->assertFalse($stream->eof());
+        $this->assertSame("data: {\"choices\":[]}\n", $stream->readLine());
+
+        // ...then the stream dies instead of reaching EOF.
+        try {
+            $stream->eof();
+            $this->fail('Expected the failure once the stream is exhausted.');
+        } catch (HttpException $exception) {
+            $this->assertSame('upstream reset', $exception->getMessage());
+        }
+
+        try {
+            $stream->readLine();
+            $this->fail('Expected readLine() to throw once the stream is exhausted.');
+        } catch (HttpException) {
+            $this->addToAssertionCount(1);
+        }
+    }
+
+    public function test_queue_sse_failure_serves_events_then_dies_mid_stream(): void
+    {
+        $client = FakeHttpClient::make()->queueSseFailure(
+            new HttpException('upstream reset', response: new HttpResponse(502, '')),
+            afterEvents: 1,
+        );
+
+        $provider = new OpenAI('test-key', 'gpt-4o');
+        $provider->setHttpClient($client);
+
+        $stream = $provider->stream(new UserMessage('Hi'));
+
+        try {
+            iterator_to_array($stream, false);
+            $this->fail('Expected the real adapter to surface the mid-stream failure.');
+        } catch (HttpException $exception) {
+            $this->assertSame('upstream reset', $exception->getMessage());
+        }
+
+        $client->assertSentCount(1);
     }
 }

@@ -17,6 +17,7 @@ use NeuronAI\Exceptions\ProviderException;
 use NeuronAI\HttpClient\HttpClientInterface;
 use NeuronAI\Providers\SupportsToolChoice;
 use NeuronAI\Testing\FakeAIProvider;
+use NeuronAI\Testing\PlainFakeAIProvider;
 use NeuronAI\Tests\Stubs\StructuredOutput\Person;
 use NeuronAI\Testing\FakeMessageMapper;
 use NeuronAI\Testing\FakeToolMapper;
@@ -26,6 +27,8 @@ use NeuronAI\Tools\Tool;
 use NeuronAI\Tools\ToolProperty;
 use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\TestCase;
+
+use function iterator_to_array;
 
 class FakeAIProviderTest extends TestCase
 {
@@ -419,15 +422,199 @@ class FakeAIProviderTest extends TestCase
         $this->assertCount(2, $provider->getRecorded());
     }
 
-    public function test_queued_exception_is_thrown_by_stream_eagerly(): void
+    public function test_queued_exception_is_thrown_by_stream_lazily(): void
     {
         $provider = new FakeAIProvider(new ProviderException('stream boom'));
 
-        // The exception must be raised by stream() itself, not only on iteration.
+        // stream() itself must not throw — real providers fail on first iteration.
+        $stream = $provider->stream(new UserMessage('Hi'));
+
+        $this->assertSame(1, $provider->getCallCount()); // attempt recorded eagerly
+
+        $this->expectException(ProviderException::class);
+        $this->expectExceptionMessage('stream boom');
+
+        iterator_to_array($stream, false);
+    }
+
+    public function test_stream_failures_can_be_made_eager(): void
+    {
+        $provider = new FakeAIProvider(new ProviderException('stream boom'));
+        $provider->setStreamFailuresEager();
+
         $this->expectException(ProviderException::class);
         $this->expectExceptionMessage('stream boom');
 
         $provider->stream(new UserMessage('Hi'));
+    }
+
+    public function test_add_streaming_response_streams_message_to_completion_without_failure(): void
+    {
+        $provider = new FakeAIProvider();
+        $provider->addStreamingResponse(new AssistantMessage('Hello!'));
+
+        $chunks = [];
+        foreach ($provider->stream(new UserMessage('Hi')) as $chunk) {
+            $chunks[] = $chunk;
+        }
+
+        $this->assertNotSame([], $chunks);
+        $provider->assertAllResponsesConsumed();
+    }
+
+    public function test_add_streaming_response_yields_n_chunks_then_throws(): void
+    {
+        $provider = new FakeAIProvider();
+        $provider->addStreamingResponse(
+            new AssistantMessage('Partial answer. '),
+            failure: new ProviderException('HTTP 502'),
+            failAfterChunks: 1,
+        );
+
+        $stream = $provider->stream(new UserMessage('Hi'));
+
+        /** @var array<int, \NeuronAI\Chat\Messages\Stream\Chunks\TextChunk> $chunks */
+        $chunks = [];
+        try {
+            foreach ($stream as $chunk) {
+                $chunks[] = $chunk;
+            }
+            $this->fail('Expected the mid-stream failure to be thrown.');
+        } catch (ProviderException $exception) {
+            $this->assertSame('HTTP 502', $exception->getMessage());
+        }
+
+        $this->assertCount(1, $chunks);
+        $this->assertSame('Parti', $chunks[0]->content);
+        $provider->assertAllResponsesConsumed();
+    }
+
+    public function test_add_streaming_response_with_fail_after_zero_dies_before_first_chunk(): void
+    {
+        $provider = new FakeAIProvider();
+        $provider->addStreamingResponse(
+            new AssistantMessage('Never seen'),
+            failure: new ProviderException('HTTP 503'),
+            failAfterChunks: 0,
+        );
+
+        $stream = $provider->stream(new UserMessage('Hi'));
+
+        $this->expectException(ProviderException::class);
+        $this->expectExceptionMessage('HTTP 503');
+
+        iterator_to_array($stream, false);
+    }
+
+    public function test_mid_stream_failure_recovery_flow(): void
+    {
+        $provider = new FakeAIProvider();
+        $provider->addStreamingResponse(
+            new AssistantMessage('Partial answer. '),
+            failure: new ProviderException('HTTP 502'),
+            failAfterChunks: 1,
+        );
+        $provider->addResponses(new AssistantMessage('Recovered fully.'));
+
+        $first = $provider->stream(new UserMessage('Hello'));
+        try {
+            foreach ($first as $chunk) {
+                $chunk = $chunk;
+            }
+            $this->fail('Expected the first stream to die mid-flight.');
+        } catch (ProviderException) {
+            // recovery path: restart on the next provider call
+        }
+
+        $second = $provider->stream(new UserMessage('Hello'));
+        $content = '';
+        foreach ($second as $chunk) {
+            $content .= $chunk->content;
+        }
+
+        $this->assertSame('Recovered fully.', $content);
+        $provider->assertMethodCallCount('stream', 2);
+        $provider->assertAllResponsesConsumed();
+    }
+
+    public function test_streaming_response_is_unwrapped_by_chat(): void
+    {
+        $message = new AssistantMessage('from chat');
+        $provider = new FakeAIProvider();
+        $provider->addStreamingResponse($message);
+
+        $this->assertSame($message, $provider->chat(new UserMessage('Hi')));
+    }
+
+    public function test_assert_tool_choices_exact_sequence(): void
+    {
+        $provider = new FakeAIProvider(new AssistantMessage('a'), new AssistantMessage('b'));
+
+        $provider->toolChoice('none');
+        $provider->chat(new UserMessage('1'));
+
+        $provider->toolChoice('auto');
+        $provider->chat(new UserMessage('2'));
+
+        $provider->assertToolChoices('none', 'auto');
+    }
+
+    public function test_assert_tool_choices_supports_null_entries(): void
+    {
+        $provider = new FakeAIProvider(new AssistantMessage('a'), new AssistantMessage('b'));
+
+        $provider->chat(new UserMessage('1')); // no choice
+        $provider->toolChoice('none');
+        $provider->chat(new UserMessage('2'));
+
+        $provider->assertToolChoices(null, 'none');
+        $provider->assertNoToolChoice(0);
+    }
+
+    public function test_assert_tool_choices_fails_on_wrong_sequence(): void
+    {
+        $provider = new FakeAIProvider(new AssistantMessage('a'), new AssistantMessage('b'));
+
+        $provider->chat(new UserMessage('1'));
+        $provider->toolChoice('none');
+        $provider->chat(new UserMessage('2'));
+
+        $this->expectException(AssertionFailedError::class);
+
+        $provider->assertToolChoices('none', null);
+    }
+
+    public function test_tool_choice_value_getter(): void
+    {
+        $provider = new FakeAIProvider();
+
+        $this->assertNull($provider->toolChoiceValue());
+
+        $provider->toolChoice('none');
+        $this->assertSame('none', $provider->toolChoiceValue());
+    }
+
+    public function test_without_tool_choice_support_returns_capability_free_fake(): void
+    {
+        $plain = FakeAIProvider::withoutToolChoiceSupport();
+        $plain->addResponses(new AssistantMessage('Answered.'));
+
+        $this->assertInstanceOf(PlainFakeAIProvider::class, $plain);
+        $this->assertNotInstanceOf(SupportsToolChoice::class, $plain);
+
+        // Streams and records like the standard fake.
+        $content = '';
+        foreach ($plain->stream(new UserMessage('Hello')) as $chunk) {
+            $content .= $chunk->content;
+        }
+
+        $this->assertSame('Answered.', $content);
+        $plain->assertMethodCallCount('stream', 1);
+        $plain->assertAllResponsesConsumed();
+
+        // No tool choice is ever recorded.
+        $plain->assertToolChoices(null);
+        $this->assertObjectNotHasProperty('toolChoice', $plain);
     }
 
     public function test_queued_exception_is_thrown_by_structured_and_recorded(): void

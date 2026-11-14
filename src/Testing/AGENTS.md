@@ -6,7 +6,10 @@ Test fakes and utilities for testing Neuron applications.
 
 | Class | Purpose |
 |-------|---------|
-| `FakeAIProvider` | Mock AI responses, record calls |
+| `FakeAIProvider` | Mock AI responses, record calls (supports tool choice) |
+| `PlainFakeAIProvider` | Same, without the tool choice capability |
+| `FakeHttpClient` | Mock HTTP transport, capture requests, queue responses/failures |
+| `FakeStream` | String-backed stream for faking SSE responses (can die mid-stream) |
 | `FakeEmbeddingsProvider` | Mock embeddings |
 | `FakeVectorStore` | Mock vector store |
 | `FakeMiddleware` | Track middleware execution |
@@ -15,8 +18,6 @@ Test fakes and utilities for testing Neuron applications.
 | `FakeToolMapper` | Mock tool mapping |
 | `RecordingObserver` | Record EventBus emissions with assertions |
 | `WorkflowTester` | Run/resume workflows through interrupts |
-| `FakeHttpClient` | Mock HTTP transport, capture requests, queue responses/failures |
-| `FakeStream` | String-backed stream for faking SSE responses |
 
 ## FakeAIProvider Usage
 
@@ -58,11 +59,48 @@ text, and a queued `ToolCallMessage` streams one `ToolCallChunk` per tool
 before the generator returns the message. Use `setStreamMessageId()` for
 deterministic chunk IDs in snapshot tests.
 
+**Stream failures are lazy**: a queued `Throwable` in the stream queue is
+thrown on first iteration, not at `stream()` call time — matching real
+providers, where recovery paths often only trigger after a chunk arrived.
+Opt back into eager throwing with `setStreamFailuresEager()`. Failures
+queued for `chat()`/`structured()` still throw at call time.
+
+Mid-stream failures that yield chunks first:
+
+```php
+// Yields 1 chunk of the message, then throws (HttpException 502).
+$provider->addStreamingResponse(
+    FakeLLM::assistant('Partial answer. '),
+    failure: new HttpException('HTTP 502', response: new HttpResponse(502, 'Bad Gateway')),
+    failAfterChunks: 1,
+);
+
+// failAfterChunks: 0 dies before the first chunk; null failure streams fully.
+```
+
 Queue strictness and filtering:
 
 ```php
 $provider->assertAllResponsesConsumed(); // no over-provisioned queue
 $provider->getRecorded('chat');          // records for one method only
+```
+
+Tool choice assertions, exact-sequence and per-index:
+
+```php
+$provider->assertToolChoices(null, 'none'); // record 0: no choice, record 1: none
+$provider->assertNoToolChoice(0);           // single record must carry no choice
+$provider->toolChoiceValue();               // current choice without an inference
+```
+
+A fake that cannot receive tool choices (for executors emulating providers
+without the capability — Bedrock Converse / Ollama style):
+
+```php
+$plain = FakeAIProvider::withoutToolChoiceSupport();
+$plain->addResponses(FakeLLM::assistant('Answered.'));
+// implements AIProviderInterface only: nodes skip toolChoice forwarding,
+// queue/record/assert behaviour is identical. Recording always shows null.
 ```
 
 **PHP Generator Gotcha**: `FakeAIProvider::stream()` uses separate `streamChunks()` method to ensure side effects execute. See project memory for details.
@@ -143,6 +181,17 @@ Streaming:
 ```php
 $client->queueSse('data: {"choices":[]}', 'data: [DONE]'); // one stream
 $client->queueSse();                                        // empty stream
+```
+
+Mid-stream transport failures (real adapters' error translation):
+
+```php
+// Serves 1 SSE event, then the stream dies — HttpException surfaces from
+// the adapter's stream iteration, not from stream() call time.
+$client->queueSseFailure(
+    new HttpException('upstream reset', response: new HttpResponse(502, '')),
+    afterEvents: 1,
+);
 ```
 
 ## Fallback / Multi-Provider Testing

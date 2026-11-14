@@ -41,7 +41,7 @@ class FakeHttpClient implements HttpClientInterface
     /** @var array<int, HttpResponse|Throwable> */
     protected array $responses = [];
 
-    /** @var array<int, string|Throwable> */
+    /** @var array<int, string|Throwable|FakeStream> */
     protected array $streams = [];
 
     /** @var HttpRequest[] */
@@ -100,6 +100,28 @@ class FakeHttpClient implements HttpClientInterface
         return $this;
     }
 
+    /**
+     * Queue a stream that serves the given number of SSE events and then
+     * dies mid-stream: the failure is thrown from the stream's read operations
+     * once the events are exhausted, not at stream() call time.
+     *
+     * The served events are OpenAI-compatible no-op chunks ("data:
+     * {"choices":[]}"), enough to start the stream before the failure hits.
+     * Use queueSse() when the event payloads themselves matter.
+     */
+    public function queueSseFailure(Throwable $exception, int $afterEvents = 1): self
+    {
+        $events = [];
+
+        for ($i = 0; $i < $afterEvents; $i++) {
+            $events[] = 'data: {"choices":[]}';
+        }
+
+        $this->streams[] = new FakeStream(implode("\n", $events), $exception);
+
+        return $this;
+    }
+
     public function request(HttpRequest $request): HttpResponse
     {
         $this->requests[] = $request;
@@ -133,6 +155,10 @@ class FakeHttpClient implements HttpClientInterface
 
         if ($next instanceof Throwable) {
             throw $next;
+        }
+
+        if ($next instanceof FakeStream) {
+            return $next;
         }
 
         return new FakeStream($next);

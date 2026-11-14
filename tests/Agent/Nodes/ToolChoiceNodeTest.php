@@ -13,6 +13,7 @@ use NeuronAI\Chat\Messages\AssistantMessage;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronAI\HttpClient\HttpResponse;
 use NeuronAI\Providers\OpenAI\OpenAI;
+use NeuronAI\Providers\SupportsToolChoice;
 use NeuronAI\Testing\FakeAIProvider;
 use NeuronAI\Testing\FakeHttpClient;
 use NeuronAI\Tests\Stubs\StructuredOutput\ToolChoiceOutput;
@@ -123,6 +124,26 @@ class ToolChoiceNodeTest extends TestCase
 
         $this->assertSame('none', $provider->getRecorded()[0]->toolChoice);
         $provider->assertToolChoice('none');
+    }
+
+    public function test_nodes_skip_forwarding_to_provider_without_capability(): void
+    {
+        // Emulates providers that cannot receive a tool choice (Bedrock
+        // Converse / Ollama emulation path in consumer executors).
+        $provider = FakeAIProvider::withoutToolChoiceSupport();
+        $provider->addResponses(new AssistantMessage('second turn'));
+
+        $event = $this->event('none');
+        $state = new AgentState();
+
+        $node = new ChatNode($provider);
+        $node->setWorkflowContext($state, $event);
+        $node($event, $state);
+
+        $this->assertNotInstanceOf(SupportsToolChoice::class, $provider);
+        $provider->assertMethodCallCount('chat', 1);
+        $provider->assertToolChoices(null); // no choice reached the provider
+        $provider->assertAllResponsesConsumed();
     }
 
     protected function event(string $toolChoice): AIInferenceEvent

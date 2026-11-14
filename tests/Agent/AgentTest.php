@@ -8,7 +8,6 @@ use NeuronAI\Agent\Agent;
 use NeuronAI\Agent\AgentState;
 use NeuronAI\Chat\History\InMemoryChatHistory;
 use NeuronAI\Chat\Messages\AssistantMessage;
-use NeuronAI\Chat\Messages\Message;
 use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
 use NeuronAI\Chat\Messages\ToolCallMessage;
 use NeuronAI\Chat\Messages\UserMessage;
@@ -22,7 +21,6 @@ use NeuronAI\Tools\ToolProperty;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 use Throwable;
-use Generator;
 
 class AgentTest extends TestCase
 {
@@ -206,13 +204,12 @@ class AgentTest extends TestCase
 
         // A provider whose stream yields a chunk and then fails mid-flight,
         // modelling a dropped connection or a mid-stream API error.
-        $provider = new class () extends FakeAIProvider {
-            public function stream(Message ...$messages): Generator
-            {
-                yield new TextChunk('fake_msg', 'Hello');
-                throw new ProviderException('Connection dropped mid-stream.');
-            }
-        };
+        $provider = new FakeAIProvider();
+        $provider->addStreamingResponse(
+            new AssistantMessage('Hello'),
+            failure: new ProviderException('Connection dropped mid-stream.'),
+            failAfterChunks: 1,
+        );
 
         $agent = Agent::make()
             ->setAiProvider($provider)

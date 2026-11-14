@@ -25,6 +25,16 @@ trait HasToolChoice
         return $this;
     }
 
+    /**
+     * The currently configured tool choice, without running an inference.
+     *
+     * @return string|array{type: string, name?: string}|null
+     */
+    public function toolChoiceValue(): string|array|null
+    {
+        return $this->toolChoice;
+    }
+
     protected function assertValidToolChoice(string|array $toolChoice): void
     {
         if (is_string($toolChoice)) {
