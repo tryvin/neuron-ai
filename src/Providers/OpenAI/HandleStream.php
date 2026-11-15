@@ -16,6 +16,7 @@ use NeuronAI\Exceptions\ProviderException;
 use NeuronAI\HttpClient\HttpRequest;
 use NeuronAI\HttpClient\ProviderErrorClassifier;
 use NeuronAI\HttpClient\StreamInterface;
+use NeuronAI\Providers\DrainsTrailingUsage;
 use NeuronAI\Providers\SSEParser;
 
 use function array_unshift;
@@ -23,6 +24,8 @@ use function json_encode;
 
 trait HandleStream
 {
+    use DrainsTrailingUsage;
+
     protected StreamState $streamState;
 
     protected ?HttpRequest $streamRequest = null;
@@ -91,9 +94,7 @@ trait HandleStream
             $this->streamState->messageId($line['id'] ?? null);
 
             // Capture usage information
-            if (!empty($line['usage'])) {
-                $this->streamState->setUsage($this->buildUsage($line['usage']));
-            }
+            $this->captureUsage($line);
 
             if (empty($line['choices'])) {
                 continue;
@@ -121,6 +122,10 @@ trait HandleStream
             if ($this->finishForToolCall($choice)) {
                 yield from $this->processToolCallDelta($choice);
                 toolcall:
+                // Drain the usage-only tail that OpenAI/OpenRouter emit after
+                // the finish reason (stream_options => include_usage).
+                $this->drainTrailingUsage($stream);
+
                 $message = $this->createToolCallMessage(
                     $this->streamState->getToolCalls(),
                     $this->streamState->getContentBlocks()

@@ -17,6 +17,7 @@ use NeuronAI\Exceptions\ProviderException;
 use NeuronAI\HttpClient\HttpRequest;
 use NeuronAI\HttpClient\ProviderErrorClassifier;
 use NeuronAI\HttpClient\StreamInterface;
+use NeuronAI\Providers\DrainsTrailingUsage;
 use NeuronAI\Tools\ToolInterface;
 
 use function array_key_exists;
@@ -27,6 +28,8 @@ use function rtrim;
 
 trait HandleStream
 {
+    use DrainsTrailingUsage;
+
     protected StreamState $streamState;
 
     /**
@@ -106,15 +109,7 @@ trait HandleStream
             }
 
             // Save usage information
-            if (array_key_exists('usageMetadata', $line) &&
-                array_key_exists('promptTokenCount', $line['usageMetadata']) &&
-                array_key_exists('candidatesTokenCount', $line['usageMetadata'])
-            ) {
-                $this->streamState->getUsage()->inputTokens = $line['usageMetadata']['promptTokenCount'] ?? 0;
-                $this->streamState->getUsage()->outputTokens = $line['usageMetadata']['candidatesTokenCount'] ?? 0;
-                $this->streamState->getUsage()->cachedInputTokens = $line['usageMetadata']['cachedContentTokenCount'] ?? 0;
-                $this->streamState->getUsage()->reasoningTokens = $line['usageMetadata']['thoughtsTokenCount'] ?? 0;
-            }
+            $this->captureUsage($line);
 
             // Track finishReason — the last value seen is authoritative
             if (isset($line['candidates'][0]['finishReason'])) {
@@ -139,6 +134,9 @@ trait HandleStream
                 $this->streamState->hasToolCalls()
             ) {
                 toolcall:
+                // Drain the usage-only tail Gemini emits after the finish reason.
+                $this->drainTrailingUsage($stream);
+
                 return $this->createToolCallMessage(
                     $this->streamState->getContentBlocks(),
                     $this->streamState->getToolCalls()
@@ -238,5 +236,35 @@ trait HandleStream
         }
 
         return rtrim($buffer, ']');
+    }
+
+    /**
+     * Gemini streams raw JSON lines instead of SSE frames.
+     *
+     * @return array<string, mixed>|null
+     */
+    protected function nextStreamEvent(StreamInterface $stream): ?array
+    {
+        return json_decode((string) $this->readLine($stream), true);
+    }
+
+    /**
+     * @param array<string, mixed> $line
+     */
+    protected function captureUsage(array $line): bool
+    {
+        if (! array_key_exists('usageMetadata', $line) ||
+            ! array_key_exists('promptTokenCount', $line['usageMetadata']) ||
+            ! array_key_exists('candidatesTokenCount', $line['usageMetadata'])
+        ) {
+            return false;
+        }
+
+        $this->streamState->getUsage()->inputTokens = $line['usageMetadata']['promptTokenCount'] ?? 0;
+        $this->streamState->getUsage()->outputTokens = $line['usageMetadata']['candidatesTokenCount'] ?? 0;
+        $this->streamState->getUsage()->cachedInputTokens = $line['usageMetadata']['cachedContentTokenCount'] ?? 0;
+        $this->streamState->getUsage()->reasoningTokens = $line['usageMetadata']['thoughtsTokenCount'] ?? 0;
+
+        return true;
     }
 }

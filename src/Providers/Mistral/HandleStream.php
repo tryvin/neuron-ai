@@ -15,6 +15,7 @@ use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
 use NeuronAI\Exceptions\HttpException;
 use NeuronAI\Exceptions\ProviderException;
 use NeuronAI\HttpClient\HttpRequest;
+use NeuronAI\Providers\DrainsTrailingUsage;
 use NeuronAI\Providers\OpenAI\StreamState;
 use NeuronAI\Providers\SSEParser;
 
@@ -24,6 +25,8 @@ use function array_merge;
 
 trait HandleStream
 {
+    use DrainsTrailingUsage;
+
     protected StreamState $streamState;
 
     /**
@@ -72,10 +75,7 @@ trait HandleStream
             }
 
             // Capture usage information
-            if (!empty($line['usage'])) {
-                $this->streamState->addInputTokens($line['usage']['prompt_tokens'] ?? 0);
-                $this->streamState->addOutputTokens($line['usage']['completion_tokens'] ?? 0);
-            }
+            $this->captureUsage($line);
 
             if (empty($line['choices'])) {
                 continue;
@@ -88,7 +88,11 @@ trait HandleStream
                 $this->streamState->composeToolCalls($line);
 
                 // Handle tool calls
-                if ($choice['finish_reason'] === 'tool_calls') {
+                if (($choice['finish_reason'] ?? null) === 'tool_calls') {
+                    // Drain the usage-only tail Mistral emits after the
+                    // finish reason (stream_options => include_usage).
+                    $this->drainTrailingUsage($stream);
+
                     return $this->createToolCallMessage(
                         $this->streamState->getToolCalls(),
                         $this->streamState->getContentBlocks()
@@ -140,6 +144,21 @@ trait HandleStream
             if (isset($call['function'])) {
                 return true;
             }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param array<string, mixed> $line
+     */
+    protected function captureUsage(array $line): bool
+    {
+        if (!empty($line['usage'])) {
+            $this->streamState->addInputTokens($line['usage']['prompt_tokens'] ?? 0);
+            $this->streamState->addOutputTokens($line['usage']['completion_tokens'] ?? 0);
+
+            return true;
         }
 
         return false;
