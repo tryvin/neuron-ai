@@ -13,10 +13,12 @@ use NeuronAI\Chat\Messages\Stream\Chunks\ToolCallChunk;
 use NeuronAI\Chat\Messages\Stream\Chunks\ToolResultChunk;
 use NeuronAI\Chat\Messages\ToolCallMessage;
 use NeuronAI\Chat\Messages\ToolResultMessage;
+use NeuronAI\Exceptions\ToolException;
 use NeuronAI\Exceptions\ToolRunsExceededException;
 use NeuronAI\Agent\Tools\ToolRejectionHandler;
 use NeuronAI\Observability\Events\ToolCalled;
 use NeuronAI\Observability\Events\ToolCalling;
+use NeuronAI\Observability\Events\ToolRunLimitReached;
 use NeuronAI\Tools\HasInterrupt;
 use NeuronAI\Tools\HasRunKey;
 use NeuronAI\Tools\Tool;
@@ -28,6 +30,7 @@ use NeuronAI\Workflow\Node;
 use Throwable;
 
 use function json_encode;
+use function is_int;
 
 /**
  * Node responsible for executing tool calls.
@@ -41,10 +44,19 @@ class ToolNode extends Node
      */
     protected $errorHandler;
 
+    /**
+     * A fixed limit, or a policy evaluated once per tool attempt at
+     * enforcement time: fn(ToolInterface $tool, int $runsSoFar): int.
+     *
+     * @var int|callable
+     */
+    protected $maxRuns = 10;
+
     public function __construct(
-        protected int $maxRuns = 10,
+        int|callable $maxRuns = 10,
         ?callable $errorHandler = null
     ) {
+        $this->maxRuns = $maxRuns;
         $this->errorHandler = $errorHandler;
     }
 
@@ -128,16 +140,7 @@ class ToolNode extends Node
         $this->emit('tool-calling', new ToolCalling($tool));
 
         try {
-            // Use custom run key if tool implements HasRunKey, otherwise use tool name
-            $key = $tool instanceof HasRunKey ? $tool->getRunKey() : $tool->getName();
-
-            $state->incrementToolRun($key);
-
-            // Single tool max tries have the highest priority over the global max tries
-            $runs = $tool->getMaxRuns() ?? $this->maxRuns;
-            if ($state->getToolRuns($key) > $runs) {
-                throw new ToolRunsExceededException("Tool {$tool->getName()} has been executed too many times - {$runs} - with arguments: ".json_encode($tool->getInputs()));
-            }
+            $this->enforceRunLimit($tool, $state);
 
             $tool->execute();
 
@@ -155,6 +158,54 @@ class ToolNode extends Node
         } finally {
             $this->emit('tool-called', new ToolCalled($tool));
         }
+    }
+
+    /**
+     * Count the attempt and refuse the execution when the tool's run budget
+     * is exhausted. The refusal goes through handleError() like any other
+     * failure: with a configured error handler it becomes the tool result,
+     * without one it propagates.
+     *
+     * @throws ToolRunsExceededException
+     */
+    protected function enforceRunLimit(ToolInterface $tool, AgentState $state): void
+    {
+        // Use custom run key if tool implements HasRunKey, otherwise use tool name
+        $key = $tool instanceof HasRunKey ? $tool->getRunKey() : $tool->getName();
+
+        $state->incrementToolRun($key);
+
+        $runs = $state->getToolRuns($key);
+
+        // Single tool max runs have the highest priority over the agent-level value
+        $limit = $tool->getMaxRuns() ?? $this->resolveMaxRuns($tool, $runs);
+
+        if ($runs > $limit) {
+            $this->emit('tool-run-limit', new ToolRunLimitReached($tool, $runs, $limit));
+
+            throw new ToolRunsExceededException(
+                "Tool {$tool->getName()} has been executed too many times (attempt {$runs}) - {$limit} - with arguments: ".json_encode($tool->getInputs())
+            );
+        }
+    }
+
+    /**
+     * The agent-level limit: a fixed int, or a policy evaluated once per tool
+     * attempt, at enforcement time.
+     */
+    protected function resolveMaxRuns(ToolInterface $tool, int $runsSoFar): int
+    {
+        if (is_int($this->maxRuns)) {
+            return $this->maxRuns;
+        }
+
+        $limit = ($this->maxRuns)($tool, $runsSoFar);
+
+        if (! is_int($limit)) {
+            throw new ToolException('The toolMaxRuns callable must return an integer.');
+        }
+
+        return $limit;
     }
 
     /**

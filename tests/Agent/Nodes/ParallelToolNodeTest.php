@@ -92,7 +92,7 @@ class ParallelToolNodeTest extends TestCase
         $toolNode->setWorkflowContext($state, $event);
 
         $this->expectException(ToolRunsExceededException::class);
-        $this->expectExceptionMessage('Tool bounded_tool has been attempted too many times: 1 attempts.');
+        $this->expectExceptionMessage('Tool bounded_tool has been executed too many times (attempt 2) - 1 - with arguments: []');
 
         foreach ($toolNode($event, $state) as $_) {
             $_ = null; // This is to prevent rector from removing it.

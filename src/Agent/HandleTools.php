@@ -36,9 +36,12 @@ trait HandleTools
     protected array $toolsBootstrapCache = [];
 
     /**
-     * Global max runs for all tools.
+     * Global max runs for all tools. An int, or a callable evaluated once per
+     * tool attempt at enforcement time: fn(ToolInterface $tool, int $runsSoFar): int.
+     *
+     * @var int|callable
      */
-    protected int $toolMaxRuns = 10;
+    protected $toolMaxRuns = 10;
 
     /**
      * Callback to handle tool execution errors.
@@ -72,7 +75,7 @@ trait HandleTools
         return $this->toolErrorHandler;
     }
 
-    public function toolMaxRuns(int $num): Agent
+    public function toolMaxRuns(int|callable $num): Agent
     {
         $this->toolMaxRuns = $num;
         return $this;
@@ -81,7 +84,7 @@ trait HandleTools
     /**
      * @deprecated Use toolMaxRuns instead.
      */
-    public function toolMaxTries(int $tries): Agent
+    public function toolMaxTries(int|callable $tries): Agent
     {
         $this->toolMaxRuns = $tries;
         return $this;
