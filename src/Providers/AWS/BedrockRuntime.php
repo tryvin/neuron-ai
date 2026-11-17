@@ -78,15 +78,12 @@ class BedrockRuntime implements AIProviderInterface, SupportsToolChoice
 
         $tools = $this->toolPayloadMapper()->map($this->tools);
 
-        if ($tools !== []) {
-            // Bedrock Converse has no "none" tool choice. Omitting toolConfig is
-            // the emulation that prevents tool calls for this request.
-            if ($this->toolChoice !== 'none') {
-                $payload['toolConfig']['tools'] = $tools;
-
-                if (($toolChoice = $this->toolChoicePayload()) !== null) {
-                    $payload['toolConfig']['toolChoice'] = $toolChoice;
-                }
+        // Bedrock Converse has no "none" tool choice. Omitting toolConfig is
+        // the emulation that prevents tool calls for this request.
+        if ($tools !== [] && $this->toolChoice !== 'none') {
+            $payload['toolConfig']['tools'] = $tools;
+            if (($toolChoice = $this->toolChoicePayload()) !== null) {
+                $payload['toolConfig']['toolChoice'] = $toolChoice;
             }
         }
 

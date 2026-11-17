@@ -86,7 +86,7 @@ trait HandleStream
                     (string) json_encode($line)
                 );
 
-                if ($exception !== null) {
+                if ($exception instanceof \NeuronAI\Exceptions\ContextWindowExceededException) {
                     throw $exception;
                 }
             }

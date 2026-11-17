@@ -94,7 +94,7 @@ class ZAI extends OpenAI
 
         $reasoningContent = $response['choices'][0]['message']['reasoning_content'] ?? null;
 
-        if ($reasoningContent !== null && $message->getReasoning() === null) {
+        if ($reasoningContent !== null && !$message->getReasoning() instanceof \NeuronAI\Chat\Messages\ContentBlocks\ReasoningContent) {
             $message->addContent(new ReasoningContent($reasoningContent));
         }
 

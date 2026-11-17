@@ -47,7 +47,7 @@ class AmpHttpClient implements HttpClientInterface
             );
 
             $contextWindowException = ProviderErrorClassifier::classify($request, $httpResponse);
-            if ($contextWindowException !== null) {
+            if ($contextWindowException instanceof \NeuronAI\Exceptions\ContextWindowExceededException) {
                 throw $contextWindowException;
             }
 
@@ -133,7 +133,7 @@ class AmpHttpClient implements HttpClientInterface
                 );
 
                 $contextWindowException = ProviderErrorClassifier::classify($request, $httpResponse);
-                if ($contextWindowException !== null) {
+                if ($contextWindowException instanceof \NeuronAI\Exceptions\ContextWindowExceededException) {
                     throw $contextWindowException;
                 }
 

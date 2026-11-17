@@ -50,7 +50,6 @@ class ToolChoiceNodeTest extends TestCase
         $node->setWorkflowContext($state, $event);
 
         foreach ($node($event, $state) as $chunk) {
-            $chunk = $chunk;
         }
 
         $this->assertSame(['stream'], $provider->calls);

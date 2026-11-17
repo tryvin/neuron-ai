@@ -105,11 +105,11 @@ final class ProviderErrorClassifier
             return null;
         }
 
-        $message = $request !== null
+        $message = $request instanceof \NeuronAI\HttpClient\HttpRequest
             ? "HTTP {$response->statusCode} error during {$request->method->value} {$request->uri}: {$response->body}"
             : "HTTP {$response->statusCode} error: {$response->body}";
 
-        if ($request !== null) {
+        if ($request instanceof \NeuronAI\HttpClient\HttpRequest) {
             return ContextWindowExceededException::forResponse(
                 $message,
                 $request,
@@ -211,13 +211,20 @@ final class ProviderErrorClassifier
         $candidates[] = $decoded['type'] ?? null;
 
         foreach ($candidates as $candidate) {
-            if (is_int($candidate) || !is_string($candidate)) {
+            if (is_int($candidate)) {
                 continue;
             }
-
+            if (!is_string($candidate)) {
+                continue;
+            }
             $candidate = trim($candidate);
-
-            if ($candidate === '' || strtolower($candidate) === 'error' || ctype_digit($candidate)) {
+            if ($candidate === '') {
+                continue;
+            }
+            if (strtolower($candidate) === 'error') {
+                continue;
+            }
+            if (ctype_digit($candidate)) {
                 continue;
             }
 

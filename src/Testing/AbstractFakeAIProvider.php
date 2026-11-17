@@ -138,7 +138,7 @@ abstract class AbstractFakeAIProvider implements AIProviderInterface
     protected function streamChunks(Message|Throwable|StreamingResponse $response): Generator
     {
         if ($response instanceof StreamingResponse) {
-            if ($response->failure === null) {
+            if (!$response->failure instanceof Throwable) {
                 return yield from $this->messageChunks($response->message);
             }
 
@@ -163,7 +163,7 @@ abstract class AbstractFakeAIProvider implements AIProviderInterface
     {
         $yielded = 0;
 
-        if ($message !== null) {
+        if ($message instanceof \NeuronAI\Chat\Messages\Message) {
             foreach ($this->messageChunks($message) as $chunk) {
                 if ($yielded >= $failAfterChunks) {
                     break;
@@ -539,9 +539,6 @@ abstract class AbstractFakeAIProvider implements AIProviderInterface
         );
     }
 
-    /**
-     * @return Message|Throwable|StreamingResponse
-     */
     protected function nextResponse(): Message|Throwable|StreamingResponse
     {
         if ($this->responseQueue === []) {

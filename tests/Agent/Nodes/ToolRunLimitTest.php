@@ -410,11 +410,6 @@ class ToolRunLimitTest extends TestCase
         return new class ($name) extends Tool implements HasInterrupt {
             use InterruptHandler;
 
-            public function __construct(string $name)
-            {
-                parent::__construct(name: $name);
-            }
-
             public function __invoke(mixed ...$params): string
             {
                 $this->setInterruptRequest(new ApprovalRequest('human input needed'));

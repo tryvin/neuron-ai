@@ -69,7 +69,7 @@ class EventBus
         $branchId ??= '__main__';
 
         if (!isset(self::$initialized[$scope]) || !self::$initialized[$scope]) {
-            if (self::$defaultObserver !== null) {
+            if (self::$defaultObserver instanceof \NeuronAI\Observability\ObserverInterface) {
                 self::observe(self::$defaultObserver, $workflowId);
             } elseif (($_ENV['INSPECTOR_INGESTION_KEY'] ?? '') !== '') {
                 // Zero-config Inspector integration: attach the observer only

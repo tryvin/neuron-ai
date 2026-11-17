@@ -479,7 +479,7 @@ class GeminiTest extends TestCase
         $this->assertSame('sig-1', $toolCall->getMetadata('thought_signature'));
 
         $provider->chat(new UserMessage('Hi'), $toolCall);
-        $sent = json_decode($sentRequests[1]['request']->getBody()->getContents(), true);
+        $sent = json_decode((string) $sentRequests[1]['request']->getBody()->getContents(), true);
 
         $this->assertSame('sig-1', $sent['contents'][1]['parts'][1]['thought_signature']);
     }

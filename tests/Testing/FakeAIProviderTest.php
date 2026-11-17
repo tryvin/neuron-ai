@@ -516,11 +516,8 @@ class FakeAIProviderTest extends TestCase
         );
         $provider->addResponses(new AssistantMessage('Recovered fully.'));
 
-        $first = $provider->stream(new UserMessage('Hello'));
+        $provider->stream(new UserMessage('Hello'));
         try {
-            foreach ($first as $chunk) {
-                $chunk = $chunk;
-            }
             $this->fail('Expected the first stream to die mid-flight.');
         } catch (ProviderException) {
             // recovery path: restart on the next provider call

@@ -217,7 +217,7 @@ class GuzzleHttpClient implements HttpClientInterface
             );
 
             $contextWindowException = ProviderErrorClassifier::classify($request, $response, $e);
-            if ($contextWindowException !== null) {
+            if ($contextWindowException instanceof \NeuronAI\Exceptions\ContextWindowExceededException) {
                 throw $contextWindowException;
             }
 

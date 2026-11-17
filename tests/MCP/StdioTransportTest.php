@@ -7,50 +7,57 @@ namespace Tests\MCP;
 use NeuronAI\MCP\StdioTransport;
 use PHPUnit\Framework\TestCase;
 
+use function file_put_contents;
+use function sys_get_temp_dir;
+use function tempnam;
+use function unlink;
+
+use const PHP_BINARY;
+
 class StdioTransportTest extends TestCase
 {
     public function testReceiveHandlesLargeLineDelimitedJsonResponses(): void
     {
         $serverPath = tempnam(sys_get_temp_dir(), 'neuron-mcp-stdio-test-') . '.php';
         file_put_contents($serverPath, <<<'PHP'
-<?php
+            <?php
 
-$tools = [];
-for ($i = 0; $i < 200; $i++) {
-    $tools[] = [
-        'name' => 'tool_' . $i,
-        'description' => str_repeat('Large description ', 20),
-        'inputSchema' => ['type' => 'object', 'properties' => new stdClass()],
-    ];
-}
+            $tools = [];
+            for ($i = 0; $i < 200; $i++) {
+                $tools[] = [
+                    'name' => 'tool_' . $i,
+                    'description' => str_repeat('Large description ', 20),
+                    'inputSchema' => ['type' => 'object', 'properties' => new stdClass()],
+                ];
+            }
 
-while (($line = fgets(STDIN)) !== false) {
-    $request = json_decode($line, true);
-    if (($request['method'] ?? null) === 'initialize') {
-        echo json_encode([
-            'jsonrpc' => '2.0',
-            'id' => $request['id'],
-            'result' => [
-                'protocolVersion' => '2024-11-05',
-                'capabilities' => ['tools' => new stdClass()],
-                'serverInfo' => ['name' => 'test', 'version' => '1.0.0'],
-            ],
-        ]) . "\n";
-        flush();
-        continue;
-    }
+            while (($line = fgets(STDIN)) !== false) {
+                $request = json_decode($line, true);
+                if (($request['method'] ?? null) === 'initialize') {
+                    echo json_encode([
+                        'jsonrpc' => '2.0',
+                        'id' => $request['id'],
+                        'result' => [
+                            'protocolVersion' => '2024-11-05',
+                            'capabilities' => ['tools' => new stdClass()],
+                            'serverInfo' => ['name' => 'test', 'version' => '1.0.0'],
+                        ],
+                    ]) . "\n";
+                    flush();
+                    continue;
+                }
 
-    if (($request['method'] ?? null) === 'tools/list') {
-        echo json_encode([
-            'jsonrpc' => '2.0',
-            'id' => $request['id'],
-            'result' => ['tools' => $tools],
-        ]) . "\n";
-        flush();
-        continue;
-    }
-}
-PHP);
+                if (($request['method'] ?? null) === 'tools/list') {
+                    echo json_encode([
+                        'jsonrpc' => '2.0',
+                        'id' => $request['id'],
+                        'result' => ['tools' => $tools],
+                    ]) . "\n";
+                    flush();
+                    continue;
+                }
+            }
+            PHP);
 
         $transport = new StdioTransport([
             'command' => PHP_BINARY,

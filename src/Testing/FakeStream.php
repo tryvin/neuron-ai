@@ -18,18 +18,13 @@ use function substr;
  */
 class FakeStream implements StreamInterface
 {
-    protected string $buffer;
-
-    public function __construct(
-        string $content,
-        protected ?Throwable $failOnExhaustion = null,
-    ) {
-        $this->buffer = $content;
+    public function __construct(protected string $buffer, protected ?Throwable $failOnExhaustion = null)
+    {
     }
 
     public function eof(): bool
     {
-        if ($this->buffer === '' && $this->failOnExhaustion !== null) {
+        if ($this->buffer === '' && $this->failOnExhaustion instanceof Throwable) {
             throw $this->failOnExhaustion;
         }
 
@@ -41,7 +36,7 @@ class FakeStream implements StreamInterface
         $chunk = substr($this->buffer, 0, $length);
         $this->buffer = substr($this->buffer, $length);
 
-        if ($chunk === '' && $this->failOnExhaustion !== null) {
+        if ($chunk === '' && $this->failOnExhaustion instanceof Throwable) {
             throw $this->failOnExhaustion;
         }
 
@@ -50,7 +45,7 @@ class FakeStream implements StreamInterface
 
     public function readLine(): string
     {
-        if ($this->buffer === '' && $this->failOnExhaustion !== null) {
+        if ($this->buffer === '' && $this->failOnExhaustion instanceof Throwable) {
             throw $this->failOnExhaustion;
         }
 
