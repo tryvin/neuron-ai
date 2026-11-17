@@ -83,6 +83,8 @@ trait HandleStream
                     $this->streamState->addCachedInputTokens(
                         $event['metadata']['usage']['cacheReadInputTokens'] ?? 0
                     );
+                    $this->streamState->getUsage()->cacheWriteTokens +=
+                        $event['metadata']['usage']['cacheWriteInputTokens'] ?? 0;
                 }
 
                 if (isset($event['messageStop']['stopReason'])) {

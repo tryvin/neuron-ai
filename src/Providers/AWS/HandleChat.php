@@ -111,6 +111,8 @@ trait HandleChat
             $usage['inputTokens'] ?? 0,
             $usage['outputTokens'] ?? 0,
             $usage['cacheReadInputTokens'] ?? 0,
+            0,
+            $usage['cacheWriteInputTokens'] ?? 0,
         );
     }
 }

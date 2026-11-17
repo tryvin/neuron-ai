@@ -34,6 +34,17 @@ class Usage implements JsonSerializable
          */
         public int $reasoningTokens = 0,
         /**
+         * Tokens written to the provider prompt cache, billed at the cache
+         * write rate. Whether this count is already part of `inputTokens`
+         * is provider-specific: Anthropic and Bedrock report cache writes
+         * (`cache_creation_input_tokens` / `cacheWriteInputTokens`)
+         * separately from input tokens, while OpenAI reports cache write
+         * tokens as a subset of `prompt_tokens` on models that charge for
+         * writes. Stays `0` for providers without cache writes (e.g. Gemini
+         * implicit caching has no write bucket).
+         */
+        public int $cacheWriteTokens = 0,
+        /**
          * Cost of the input tokens, expressed as a string to preserve
          * decimal precision. Stays `null` when the provider does not expose
          * cost (most providers). Enriched by providers that do (e.g. OpenRouter,
@@ -71,6 +82,7 @@ class Usage implements JsonSerializable
             'output_tokens' => $this->outputTokens,
             'cached_input_tokens' => $this->cachedInputTokens,
             'reasoning_tokens' => $this->reasoningTokens,
+            'cache_write_tokens' => $this->cacheWriteTokens,
             'input_cost' => $this->inputCost,
             'output_cost' => $this->outputCost,
             'total_cost' => $this->totalCost,

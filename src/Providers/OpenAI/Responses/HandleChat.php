@@ -102,6 +102,7 @@ trait HandleChat
             $usage['output_tokens'] ?? 0,
             $usage['input_tokens_details']['cached_tokens'] ?? 0,
             $usage['output_tokens_details']['reasoning_tokens'] ?? 0,
+            $usage['input_tokens_details']['cache_write_tokens'] ?? 0,
         );
     }
 }

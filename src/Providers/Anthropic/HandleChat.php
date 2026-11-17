@@ -133,10 +133,16 @@ trait HandleChat
      */
     protected function buildUsage(array $usage): Usage
     {
+        $cacheCreation = $usage['cache_creation'] ?? [];
+
         return new Usage(
             $usage['input_tokens'] ?? 0,
             $usage['output_tokens'] ?? 0,
             $usage['cache_read_input_tokens'] ?? 0,
+            0,
+            ($usage['cache_creation_input_tokens'] ?? 0)
+            + ($cacheCreation['ephemeral_5m_input_tokens'] ?? 0)
+            + ($cacheCreation['ephemeral_1h_input_tokens'] ?? 0),
         );
     }
 }

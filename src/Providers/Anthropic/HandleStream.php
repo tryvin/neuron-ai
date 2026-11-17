@@ -83,6 +83,10 @@ trait HandleStream
             }
         }
 
+        // Surface the accumulated cache-write count on the usage DTO; keep
+        // the metadata mirror for existing consumers.
+        $this->streamState->getUsage()->cacheWriteTokens = $this->streamState->getCacheWriteTokens();
+
         // Build the final message
         if ($this->streamState->hasToolCalls()) {
             return $this->createToolCallMessage(

@@ -325,6 +325,7 @@ abstract class AbstractChatHistory implements ChatHistoryInterface
                     $usage['output_tokens'] ?? 0,
                     $usage['cached_input_tokens'] ?? 0,
                     $usage['reasoning_tokens'] ?? 0,
+                    $usage['cache_write_tokens'] ?? 0,
                     $usage['input_cost'] ?? null,
                     $usage['output_cost'] ?? null,
                     $usage['total_cost'] ?? null,
