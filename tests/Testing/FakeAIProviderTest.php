@@ -516,8 +516,8 @@ class FakeAIProviderTest extends TestCase
         );
         $provider->addResponses(new AssistantMessage('Recovered fully.'));
 
-        $provider->stream(new UserMessage('Hello'));
         try {
+            iterator_to_array($provider->stream(new UserMessage('Hello')), false);
             $this->fail('Expected the first stream to die mid-flight.');
         } catch (ProviderException) {
             // recovery path: restart on the next provider call
