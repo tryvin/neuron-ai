@@ -18,7 +18,7 @@ class McpPromptsAndResourcesTest extends TestCase
 {
     public function test_list_prompts_accumulates_pages(): void
     {
-        $transport = new FakeMcpTransport(
+        $transport = (new FakeMcpTransport(
             [
                 'jsonrpc' => '2.0',
                 'id' => 1,
@@ -36,7 +36,7 @@ class McpPromptsAndResourcesTest extends TestCase
                     'prompts' => [['name' => 'explain']],
                 ],
             ]
-        )->asModern();
+        ))->asModern();
 
         $client = new McpClient(['transport' => $transport]);
 
@@ -51,7 +51,7 @@ class McpPromptsAndResourcesTest extends TestCase
 
     public function test_get_prompt_sends_name_and_arguments(): void
     {
-        $transport = new FakeMcpTransport(
+        $transport = (new FakeMcpTransport(
             [
                 'jsonrpc' => '2.0',
                 'id' => 1,
@@ -66,7 +66,7 @@ class McpPromptsAndResourcesTest extends TestCase
                     ],
                 ],
             ]
-        )->asModern();
+        ))->asModern();
 
         $client = new McpClient(['transport' => $transport]);
 
@@ -83,9 +83,9 @@ class McpPromptsAndResourcesTest extends TestCase
 
     public function test_get_prompt_without_arguments_omits_arguments_field(): void
     {
-        $transport = new FakeMcpTransport(
+        $transport = (new FakeMcpTransport(
             ['jsonrpc' => '2.0', 'id' => 1, 'result' => ['resultType' => 'complete', 'messages' => []]]
-        )->asModern();
+        ))->asModern();
 
         $client = new McpClient(['transport' => $transport]);
 
@@ -99,7 +99,7 @@ class McpPromptsAndResourcesTest extends TestCase
 
     public function test_list_resources(): void
     {
-        $transport = new FakeMcpTransport(
+        $transport = (new FakeMcpTransport(
             [
                 'jsonrpc' => '2.0',
                 'id' => 1,
@@ -114,7 +114,7 @@ class McpPromptsAndResourcesTest extends TestCase
                     ],
                 ],
             ]
-        )->asModern();
+        ))->asModern();
 
         $client = new McpClient(['transport' => $transport]);
 
@@ -125,7 +125,7 @@ class McpPromptsAndResourcesTest extends TestCase
 
     public function test_list_resource_templates(): void
     {
-        $transport = new FakeMcpTransport(
+        $transport = (new FakeMcpTransport(
             [
                 'jsonrpc' => '2.0',
                 'id' => 1,
@@ -136,7 +136,7 @@ class McpPromptsAndResourcesTest extends TestCase
                     ],
                 ],
             ]
-        )->asModern();
+        ))->asModern();
 
         $client = new McpClient(['transport' => $transport]);
 
@@ -147,7 +147,7 @@ class McpPromptsAndResourcesTest extends TestCase
 
     public function test_read_resource_sends_uri(): void
     {
-        $transport = new FakeMcpTransport(
+        $transport = (new FakeMcpTransport(
             [
                 'jsonrpc' => '2.0',
                 'id' => 1,
@@ -162,7 +162,7 @@ class McpPromptsAndResourcesTest extends TestCase
                     ],
                 ],
             ]
-        )->asModern();
+        ))->asModern();
 
         $client = new McpClient(['transport' => $transport]);
 
@@ -177,7 +177,7 @@ class McpPromptsAndResourcesTest extends TestCase
 
     public function test_read_resource_surfaced_error_is_typed(): void
     {
-        $transport = new FakeMcpTransport(
+        $transport = (new FakeMcpTransport(
             [
                 'jsonrpc' => '2.0',
                 'error' => [
@@ -186,7 +186,7 @@ class McpPromptsAndResourcesTest extends TestCase
                     'data' => ['uri' => 'file:///missing'],
                 ],
             ]
-        )->asModern();
+        ))->asModern();
 
         $client = new McpClient(['transport' => $transport]);
 

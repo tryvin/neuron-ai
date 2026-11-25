@@ -33,9 +33,9 @@ class McpProtocolNegotiationTest extends TestCase
 
     public function test_modern_server_skips_initialize_handshake(): void
     {
-        $transport = new FakeMcpTransport(
+        $transport = (new FakeMcpTransport(
             ['jsonrpc' => '2.0', 'id' => 2, 'result' => ['tools' => []]]
-        )->asModern();
+        ))->asModern();
 
         $client = new McpClient(['transport' => $transport]);
         $client->listTools();
@@ -47,9 +47,9 @@ class McpProtocolNegotiationTest extends TestCase
 
     public function test_modern_requests_carry_meta_metadata(): void
     {
-        $transport = new FakeMcpTransport(
+        $transport = (new FakeMcpTransport(
             ['jsonrpc' => '2.0', 'id' => 2, 'result' => ['tools' => []]]
-        )->asModern();
+        ))->asModern();
 
         $client = new McpClient(['transport' => $transport]);
         $client->listTools();
@@ -68,7 +68,7 @@ class McpProtocolNegotiationTest extends TestCase
 
     public function test_modern_server_exposes_identity_and_instructions(): void
     {
-        $transport = new FakeMcpTransport()->asModern();
+        $transport = (new FakeMcpTransport())->asModern();
 
         $client = new McpClient(['transport' => $transport]);
 
@@ -78,7 +78,7 @@ class McpProtocolNegotiationTest extends TestCase
 
     public function test_unsupported_protocol_version_error_negotiates_from_supported_list(): void
     {
-        $transport = new FakeMcpTransport()->answerDiscoverWith(
+        $transport = (new FakeMcpTransport())->answerDiscoverWith(
             ['jsonrpc' => '2.0', 'error' => [
                 'code' => -32022,
                 'message' => 'Unsupported protocol version',
@@ -97,7 +97,7 @@ class McpProtocolNegotiationTest extends TestCase
         $this->expectException(McpException::class);
         $this->expectExceptionMessage('No mutually supported MCP protocol version');
 
-        $transport = new FakeMcpTransport()->answerDiscoverWith(
+        $transport = (new FakeMcpTransport())->answerDiscoverWith(
             ['jsonrpc' => '2.0', 'error' => [
                 'code' => -32022,
                 'message' => 'Unsupported protocol version',
