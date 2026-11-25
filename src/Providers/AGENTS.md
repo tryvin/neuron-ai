@@ -54,7 +54,7 @@ Each provider has:
 Create a custom agent class extending `Agent`:
 
 ```php
-use NeuronAI\Agent;
+use NeuronAI\Agent\Agent;
 use NeuronAI\Providers\AIProviderInterface;
 use NeuronAI\Providers\Anthropic\Anthropic;
 use NeuronAI\SystemPrompt;

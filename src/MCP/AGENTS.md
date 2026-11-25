@@ -26,7 +26,7 @@ Model Context Protocol connector for external tool integration. MCP is an open s
 Connect MCP tools in your custom agent class:
 
 ```php
-use NeuronAI\Agent;
+use NeuronAI\Agent\Agent;
 use NeuronAI\MCP\McpConnector;
 use NeuronAI\Providers\AIProviderInterface;
 use NeuronAI\Providers\Anthropic\Anthropic;

@@ -8,7 +8,7 @@ Before writing any Neuron code, internalize this — it shapes every correct dec
 
 1. **Workflow is the foundation.** Everything else is built on it. A Workflow is an event-driven graph of nodes that you can compose freely to create any agentic behaviour.
 
-2. **A catalog of components, wired by interfaces.** Neuron ships a large collection of standalone, interchangeable building blocks — AI providers, the messaging layer, chat history, tools & toolkits, structured output, RAG, vector stores, data loaders, MCP, observability. They are connected by small, focused interfaces, so each can be used on its own or swapped for your own implementation.
+2. **A catalog of components, wired by interfaces.** Neuron ships a large collection of standalone, interchangeable building blocks — AI providers, the messaging layer, chat history, tools & toolkits, structured output, RAG, vector stores, data loaders, MCP, plugins and skills, observability. They are connected by small, focused interfaces, so each can be used on its own or swapped for your own implementation.
 
 3. **`Agent` is an inspiration, not a cage.** The `Agent` class is itself a Workflow: it composes the components above (chat/stream/structured nodes, tools, history, middleware) into a ready-to-use agentic entity. Study it to see how a Workflow is assembled. Then choose your path:
 
@@ -54,6 +54,9 @@ Chat ◄────────────────────────
 | `src/StructuredOutput/` | JSON schema extraction                                        | Chat |
 | `src/HttpClient/` | HTTP client abstraction                                       | None |
 | `src/MCP/` | Model Context Protocol connector                              | HttpClient |
+| `src/Storage/` | Read-only file access behind plugins and skills | None |
+| `src/Skills/` | Agent Skills: discovery and the `skill` tool | Tools, Storage |
+| `src/Plugins/` | Agent Plugins: manifest, skills and MCP servers | Skills, MCP, Storage, Tools |
 | `src/Observability/` | EventBus and observers                                        | None |
 | `src/Console/` | CLI commands (make:*, evaluation)                             | Evaluation |
 | `src/Evaluation/` | AI evaluation framework                                       | None |
@@ -68,6 +71,7 @@ Read module-specific `AGENTS.md` files when working on that area:
 - Working with messages/history? → `src/Chat/AGENTS.md`
 - Adding/modifying AI providers? → `src/Providers/AGENTS.md`
 - Creating tools/toolkits? → `src/Tools/AGENTS.md`
+- Adding Agent Plugins or skills to an agent? → `src/Plugins/AGENTS.md` (step-by-step guide), `src/Skills/AGENTS.md`
 - Working with RAG/vectors? → `src/RAG/AGENTS.md`
 - CLI commands/code generation? → `src/Console/AGENTS.md`
 - AI evaluation/testing? → `src/Evaluation/AGENTS.md`

@@ -1,0 +1,15 @@
+{
+    "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+    "name": "acme-docs",
+    "version": "1.2.0",
+    "description": "Search the Acme documentation.",
+    "author": {
+        "name": "Acme",
+        "email": "plugins@acme.example",
+        "url": "https://acme.example"
+    },
+    "keywords": [
+        "documentation",
+        "search"
+    ]
+}

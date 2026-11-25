@@ -9,7 +9,7 @@ AI agent built on Workflow. Provides chat, streaming, and structured output mode
 Create a custom agent class extending `Agent`:
 
 ```php
-use NeuronAI\Agent;
+use NeuronAI\Agent\Agent;
 use NeuronAI\Providers\AIProviderInterface;
 use NeuronAI\Providers\Anthropic\Anthropic;
 use NeuronAI\SystemPrompt;
@@ -61,7 +61,7 @@ $response = YouTubeAgent::make()->chat(
 For quick prototyping or simple use cases:
 
 ```php
-use NeuronAI\Agent;
+use NeuronAI\Agent\Agent;
 use NeuronAI\Providers\Anthropic\Anthropic;
 
 $agent = Agent::make()
@@ -111,6 +111,14 @@ $report = MyAgent::make()->structured($message, ReportSchema::class);
 | `StructuredOutputNode` | JSON schema extraction |
 | `ToolNode` | Executes tool calls |
 | `ParallelToolNode` | Executes multiple tools concurrently |
+
+## Tools Bootstrap
+
+`bootstrapTools()` expands the toolkits, appends their guidelines to the instructions and collects the tools in registration order: the tools added with `addTool()` come before the ones returned by `tools()`.
+
+- **First in, first out.** Two tools with the same name cannot be both exposed to the model: the first one registered wins and the later ones are dropped. This also settles two MCP servers exposing the same tool name. As a consequence, a tool added with `addTool()` wins over a same-name tool returned by `tools()`.
+- **Workflow state.** A tool implementing `NeuronAI\Tools\HasWorkflowState` receives the state before the de-duplication, so also a dropped tool contributes its part. The `skill` tool of the `Skills` and `Plugins` modules uses it to share one register of skills.
+- **Memoized.** The bootstrap runs once; it runs again only after `addTool()`.
 
 ## Middleware (`Middleware/`)
 

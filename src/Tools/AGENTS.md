@@ -12,6 +12,7 @@ Tool system for agent capabilities. Tools are callable functions exposed to AI.
 | `HasOutput.php` | Opt-in interface for tools that expose `getOutput(): ToolOutput` |
 | `HasInterrupt.php` | Interface for tools that can signal workflow interrupts |
 | `InterruptHandler.php` | Trait providing interrupt/resume storage for `HasInterrupt` tools |
+| `HasWorkflowState.php` | Opt-in interface for tools that receive the workflow state when the tools are bootstrapped |
 | `ProviderTool.php` | Wrapper for MCP server tools |
 | `ProviderToolInterface.php` | Contract for provider-exposed tools |
 
@@ -274,6 +275,35 @@ class ReadFileTool extends Tool implements HasRunKey
 - Paginated API calls with different page numbers
 - Database queries with different IDs
 
+## Receiving the Workflow State
+
+A tool that needs the agent state implements `HasWorkflowState`. When the agent bootstraps its tools, it receives the state before anything else:
+
+```php
+use NeuronAI\Tools\Tool;
+use NeuronAI\Tools\HasWorkflowState;
+use NeuronAI\Workflow\WorkflowState;
+
+class LookupTool extends Tool implements HasWorkflowState
+{
+    protected ?WorkflowState $state = null;
+
+    public function setWorkflowState(WorkflowState $state): void
+    {
+        $this->state = $state;
+    }
+
+    // ...
+}
+```
+
+**How it works:**
+
+- `Agent::bootstrapTools()` calls `setWorkflowState()` on every tool implementing the interface, **before** de-duplicating the tools with the same name: also a tool dropped as a duplicate has contributed its part
+- The bootstrap is memoized and runs again after `addTool()`: a tool must tolerate being bound more than once
+- Hidden tools (`visible(false)`) never receive the state
+- A tool used outside the agent is never bound: fall back to working without the state
+
 ## Property Types
 
 | Class | JSON Schema Type |
@@ -287,7 +317,7 @@ class ReadFileTool extends Tool implements HasRunKey
 Register tools in your custom agent class:
 
 ```php
-use NeuronAI\Agent;
+use NeuronAI\Agent\Agent;
 use NeuronAI\Providers\AIProviderInterface;
 use NeuronAI\Providers\Anthropic\Anthropic;
 use NeuronAI\SystemPrompt;

@@ -8,6 +8,7 @@ use Inspector\Exceptions\InspectorException;
 use NeuronAI\Exceptions\AgentException;
 use NeuronAI\Observability\EventBus;
 use NeuronAI\Observability\Events\ToolsBootstrapped;
+use NeuronAI\Tools\HasWorkflowState;
 use NeuronAI\Tools\ProviderToolInterface;
 use NeuronAI\Tools\ToolInterface;
 use NeuronAI\Tools\Toolkits\ToolkitInterface;
@@ -130,32 +131,61 @@ trait HandleTools
         );*/
 
         $guidelines = [];
+        $names = [];
+        $state = null;
 
         foreach ($this->getTools() as $tool) {
+            $kitGuidelines = null;
+
             if ($tool instanceof ToolkitInterface) {
                 $kitGuidelines = $tool->guidelines();
                 if ($kitGuidelines !== null && $kitGuidelines !== '') {
                     $name = (new ReflectionClass($tool))->getShortName();
                     $kitGuidelines = '# '.$name.PHP_EOL.$kitGuidelines;
                 }
-                // Merge the tools
                 $innerTools = $tool->tools();
-                $this->toolsBootstrapCache = array_merge($this->toolsBootstrapCache, $innerTools);
-                // Add guidelines to the system prompt
-                if (!in_array($kitGuidelines, [null, '', '0'], true)) {
-                    $kitGuidelines .= PHP_EOL.implode(
-                        PHP_EOL.'- ',
-                        array_map(
-                            fn (ToolInterface $tool): string => $tool->getName(),
-                            $innerTools
-                        )
-                    );
-
-                    $guidelines[] = $kitGuidelines;
-                }
             } elseif ($tool->isVisible()) {
                 // If the item is a simple tool, add to the list if it's authorized
-                $this->toolsBootstrapCache[] = $tool;
+                $innerTools = [$tool];
+            } else {
+                continue;
+            }
+
+            $kept = [];
+
+            foreach ($innerTools as $innerTool) {
+                // Tools opt-in through HasWorkflowState to receive the state before
+                // the de-duplication, so also a tool dropped below contributes its part.
+                if ($innerTool instanceof HasWorkflowState) {
+                    $state ??= $this->resolveState();
+                    $innerTool->setWorkflowState($state);
+                }
+
+                // The first tool registered with a name wins
+                $toolName = $innerTool->getName();
+
+                if ($toolName !== null && isset($names[$toolName])) {
+                    continue;
+                }
+
+                $names[(string) $toolName] = true;
+                $kept[] = $innerTool;
+            }
+
+            // Merge the tools
+            $this->toolsBootstrapCache = array_merge($this->toolsBootstrapCache, $kept);
+
+            if ($tool instanceof ToolkitInterface && !in_array($kitGuidelines, [null, '', '0'], true)) {
+                // Add guidelines to the system prompt
+                $kitGuidelines .= PHP_EOL.implode(
+                    PHP_EOL.'- ',
+                    array_map(
+                        fn (ToolInterface $tool): string => $tool->getName(),
+                        $kept
+                    )
+                );
+
+                $guidelines[] = $kitGuidelines;
             }
         }
 

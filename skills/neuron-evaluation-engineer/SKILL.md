@@ -195,7 +195,7 @@ Use an AI agent to evaluate outputs with custom criteria:
 
 ```php
 use NeuronAI\Evaluation\Assertions\AgentJudge;
-use NeuronAI\Agent;
+use NeuronAI\Agent\Agent;
 
 $judge = Agent::make()
     ->setInstructions('You are an expert evaluator for customer support responses.');

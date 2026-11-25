@@ -545,7 +545,7 @@ Branch IDs come from the array keys (`'structured'`, `'description'`). If you pa
 ### Step 4 — Create Branch Nodes (Each Ends with StopEvent)
 
 ```php
-use NeuronAI\Agent;
+use NeuronAI\Agent\Agent;
 use NeuronAI\Providers\OpenAI\OpenAI;
 use NeuronAI\HttpClient\AmpHttpClient;
 use NeuronAI\Workflow\Events\StopEvent;
