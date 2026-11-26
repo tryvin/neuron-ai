@@ -1,0 +1,17 @@
+{
+  "name": "neuron-mcp-apps-fixture",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Local MCP Apps server for the Neuron AI example",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/core": "2.4.0",
+    "@modelcontextprotocol/ext-apps": "2.0.4",
+    "@modelcontextprotocol/node": "2.1.2",
+    "@modelcontextprotocol/server": "2.4.0",
+    "zod": "4.2.0"
+  }
+}

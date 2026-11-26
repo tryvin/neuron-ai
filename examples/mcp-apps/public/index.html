@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Neuron AI — MCP Apps chat demo</title>
+<link rel="stylesheet" href="/assets/style.css">
+<script type="module" src="/assets/app.js"></script>
+</head>
+<body>
+<div class="shell">
+    <header class="topbar">
+        <div>
+            <h1>MCP Apps chat demo</h1>
+            <p>Neuron is the MCP client and host proxy. The iframe is a view sidecar, not a chat message.</p>
+        </div>
+        <span id="context-badge" class="badge" hidden>The view shared context for your next message.</span>
+    </header>
+
+    <div id="notice" class="notice" hidden></div>
+
+    <main id="transcript" class="transcript" aria-live="polite"></main>
+
+    <footer class="composer-wrap">
+        <div id="status" class="status"></div>
+        <form id="composer" class="composer">
+            <input id="message" type="text" autocomplete="off" placeholder="Ask about sales, or about time…" maxlength="4000">
+            <button id="send" type="submit">Send</button>
+        </form>
+    </footer>
+</div>
+</body>
+</html>

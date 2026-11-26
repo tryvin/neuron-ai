@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sales dashboard</title>
+<style>
+    :root { color-scheme: light; font: 13px/1.4 system-ui, sans-serif; }
+    body { margin: 0; padding: 12px; background: #fff; color: #172033; }
+    h2 { margin: 0 0 8px; font-size: 14px; }
+    .row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+    button { border: 1px solid #cbd5e1; background: #f8fafc; border-radius: 6px; padding: 5px 9px; cursor: pointer; }
+    button[aria-pressed="true"] { background: #2563eb; border-color: #2563eb; color: #fff; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { text-align: left; padding: 5px 6px; border-bottom: 1px solid #e2e8f0; }
+    th { color: #64748b; font-weight: 600; }
+    .total { margin-top: 8px; font-weight: 600; }
+    .status { color: #64748b; min-height: 18px; margin-top: 8px; }
+</style>
+</head>
+<body>
+<h2>Sales dashboard</h2>
+<div class="row" id="regions"></div>
+<table>
+    <thead><tr><th>Region</th><th>Revenue</th></tr></thead>
+    <tbody id="rows"><tr><td colspan="2">Waiting for tool result…</td></tr></tbody>
+</table>
+<div class="total" id="total"></div>
+<div class="row">
+    <button id="refresh" type="button">Refresh (app-only tool)</button>
+    <button id="send" type="button">Send summary to chat</button>
+    <button id="stage" type="button">Stage context</button>
+    <button id="blocked" type="button">Blocked link</button>
+</div>
+<div class="status" id="status"></div>
+
+<script>
+// Deliberately plain postMessage: the example shows the wire protocol, not an SDK.
+const regions = ['all', 'emea', 'amer', 'apac'];
+const pending = new Map();
+let nextId = 1;
+let region = 'all';
+let ready = false;
+
+const status = document.getElementById('status');
+const rows = document.getElementById('rows');
+const total = document.getElementById('total');
+const regionsEl = document.getElementById('regions');
+
+function send(method, params, request = false) {
+    const message = { jsonrpc: '2.0', method, params: params ?? {} };
+
+    if (request) {
+        message.id = nextId++;
+        pending.set(message.id, message);
+    }
+
+    parent.postMessage(message, '*');
+}
+
+function render(result) {
+    const data = result?.structuredContent;
+
+    if (!data) {
+        status.textContent = 'Tool returned no structured data.';
+        return;
+    }
+
+    region = data.region ?? region;
+    rows.replaceChildren();
+
+    for (const row of data.rows ?? []) {
+        const tr = document.createElement('tr');
+        const a = document.createElement('td');
+        const b = document.createElement('td');
+        a.textContent = row.region;
+        b.textContent = row.revenue.toLocaleString('en-US');
+        tr.append(a, b);
+        rows.append(tr);
+    }
+
+    total.textContent = data.total === undefined ? '' : `Total: ${data.total.toLocaleString('en-US')}`;
+    status.textContent = result.isError ? 'The server reported an error.' : '';
+
+    for (const button of regionsEl.querySelectorAll('button')) {
+        button.setAttribute('aria-pressed', String(button.dataset.region === region));
+    }
+}
+
+for (const name of regions) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.dataset.region = name;
+    button.textContent = name.toUpperCase();
+    button.addEventListener('click', () => {
+        if (!ready) return;
+        status.textContent = `Calling get_sales(${name})…`;
+        send('tools/call', { name: 'get_sales', arguments: { region: name } }, true);
+    });
+    regionsEl.append(button);
+}
+
+document.getElementById('refresh').addEventListener('click', () => {
+    if (!ready) return;
+    status.textContent = 'Calling refresh_sales…';
+    send('tools/call', { name: 'refresh_sales', arguments: { region } }, true);
+});
+
+document.getElementById('send').addEventListener('click', () => {
+    if (!ready) return;
+    const text = `Please summarize the ${region} sales dashboard.`;
+    send('ui/message', { role: 'user', content: { type: 'text', text } }, true);
+    status.textContent = 'Summary sent to chat.';
+});
+
+document.getElementById('stage').addEventListener('click', () => {
+    if (!ready) return;
+    send('ui/update-model-context', {
+        content: [{ type: 'text', text: `Focus the next answer on ${region} sales.` }],
+        structuredContent: { region },
+    }, true);
+    status.textContent = 'Context staged for your next message.';
+});
+
+document.getElementById('blocked').addEventListener('click', () => {
+    if (!ready) return;
+    send('ui/open-link', { url: 'javascript:alert(1)' }, true);
+    status.textContent = 'Trying a blocked link…';
+});
+
+window.addEventListener('message', (event) => {
+    const message = event.data;
+
+    if (!message || message.jsonrpc !== '2.0') return;
+
+    if (message.id !== undefined && message.method === undefined) {
+        const request = pending.get(message.id);
+        pending.delete(message.id);
+
+        if (!request) return;
+
+        if (request.method === 'ui/initialize') {
+            ready = true;
+            send('ui/notifications/initialized', {});
+            return;
+        }
+
+        if (request.method === 'tools/call') {
+            if (message.error) {
+                status.textContent = `Tool call blocked: ${message.error.message}`;
+            } else {
+                render(message.result);
+            }
+
+            return;
+        }
+
+        if (request.method === 'ui/update-model-context') {
+            status.textContent = message.error ? 'Context update blocked.' : 'Context staged for your next message.';
+            return;
+        }
+
+        if (request.method === 'ui/message') {
+            status.textContent = message.error ? 'Message blocked.' : 'Summary sent to chat.';
+            return;
+        }
+
+        if (request.method === 'ui/open-link') {
+            status.textContent = message.error
+                ? `Link blocked: ${message.error.message}`
+                : 'Link opened in a new tab.';
+        }
+
+        return;
+    }
+
+    if (message.method === 'ui/notifications/tool-result') {
+        render(message.params);
+    }
+});
+
+send('ui/initialize', {
+    appInfo: { name: 'sales-dashboard', version: '1.0.0' },
+    appCapabilities: { availableDisplayModes: ['inline', 'fullscreen'] },
+    protocolVersion: '2026-01-26',
+}, true);
+</script>
+</body>
+</html>
