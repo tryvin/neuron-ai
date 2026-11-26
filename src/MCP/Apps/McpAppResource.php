@@ -83,6 +83,7 @@ final class McpAppResource
         $csp = "default-src 'none'; "
             ."script-src {$scriptSources}; "
             ."style-src {$scriptSources}; "
+            ."font-src {$resourceSources}; "
             ."img-src {$resourceSources}; "
             ."media-src {$resourceSources}; "
             ."object-src 'none'; "

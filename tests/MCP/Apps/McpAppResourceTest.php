@@ -42,7 +42,7 @@ final class McpAppResourceTest extends TestCase
         $this->assertSame('nosniff', $headers['X-Content-Type-Options']);
         $this->assertSame(
             "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
-            ."img-src 'self' data:; media-src 'self' data:; object-src 'none'; connect-src 'none'; "
+            ."font-src 'self' data:; img-src 'self' data:; media-src 'self' data:; object-src 'none'; connect-src 'none'; "
             ."frame-src 'none'; base-uri 'self'; frame-ancestors http://127.0.0.1:8080",
             $headers['Content-Security-Policy']
         );
@@ -66,6 +66,7 @@ final class McpAppResourceTest extends TestCase
         $this->assertStringContainsString("connect-src 'self' https://api.example.com;", $headers['Content-Security-Policy']);
         $this->assertStringNotContainsString('evil.example', $headers['Content-Security-Policy']);
         $this->assertStringContainsString('img-src \'self\' data: https://cdn.example.com;', $headers['Content-Security-Policy']);
+        $this->assertStringContainsString('font-src \'self\' data: https://cdn.example.com;', $headers['Content-Security-Policy']);
         $this->assertStringContainsString("frame-src 'none';", $headers['Content-Security-Policy']);
         $this->assertStringContainsString("base-uri 'self' https://base.example.com;", $headers['Content-Security-Policy']);
     }

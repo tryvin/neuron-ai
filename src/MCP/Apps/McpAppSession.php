@@ -212,7 +212,7 @@ final class McpAppSession
             return $this->notification('ui/notifications/tool-result', $result);
         }
 
-        $params = ['content' => [['type' => 'text', 'text' => $result->text ?? '']]];
+        $params = ['content' => [['type' => 'text', 'text' => $result->getText() ?? '']]];
 
         if ($result->structuredContent !== null) {
             $params['structuredContent'] = $result->structuredContent;
@@ -305,8 +305,12 @@ final class McpAppSession
         }
 
         foreach (['serverTools', 'serverResources'] as $name) {
-            if (($config[$name]['listChanged'] ?? false) === true) {
-                $capabilities[$name] = ['listChanged' => true];
+            $settings = $config[$name] ?? null;
+
+            if (is_array($settings) || $settings === true) {
+                $capabilities[$name] = (object) [
+                    'listChanged' => is_array($settings) && ($settings['listChanged'] ?? false) === true,
+                ];
             }
         }
 
@@ -495,9 +499,13 @@ final class McpAppSession
         }
 
         $available = $this->appCapabilities['availableDisplayModes'] ?? null;
+        $hostModes = $this->context['availableDisplayModes'] ?? null;
         $current = is_string($this->context['displayMode'] ?? null) ? $this->context['displayMode'] : 'inline';
 
-        if (!is_array($available) || in_array($requested, $available, true)) {
+        if (
+            (!is_array($available) || in_array($requested, $available, true))
+            && (!is_array($hostModes) || in_array($requested, $hostModes, true))
+        ) {
             $current = $requested;
             $this->context['displayMode'] = $requested;
         }

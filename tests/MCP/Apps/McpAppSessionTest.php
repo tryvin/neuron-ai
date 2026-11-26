@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\MCP\Apps;
 
+use NeuronAI\Chat\Messages\ContentBlocks\TextContent;
 use NeuronAI\MCP\Apps\DefaultMcpAppPolicy;
 use NeuronAI\MCP\Apps\McpAppAction;
 use NeuronAI\MCP\Apps\McpAppPolicyInterface;
@@ -16,6 +17,7 @@ use stdClass;
 
 use function array_column;
 use function array_merge;
+use function json_encode;
 
 final class McpAppSessionTest extends TestCase
 {
@@ -95,6 +97,66 @@ final class McpAppSessionTest extends TestCase
         $this->assertNull($ready->response);
         $this->assertTrue($session->isInitialized());
         $this->assertEquals(new stdClass(), $session->handle($this->request('ping'))->response['result']);
+    }
+
+    public function testHostCapabilitiesAdvertiseServerToolsAndResources(): void
+    {
+        $hostCapabilities = function (array $capabilities): array {
+            $session = $this->session([
+                $this->response(['tools' => [['name' => 'get_sales', 'inputSchema' => ['type' => 'object']]]]),
+            ], ['capabilities' => $capabilities]);
+
+            return $session->handle($this->request('ui/initialize', [
+                'appInfo' => ['name' => 'sales-app', 'version' => '1.0.0'],
+                'appCapabilities' => [],
+            ], 1))->response['result']['hostCapabilities'];
+        };
+
+        $quiet = $hostCapabilities([
+            'serverTools' => ['listChanged' => false],
+            'serverResources' => ['listChanged' => false],
+        ]);
+        $this->assertSame('{"listChanged":false}', json_encode($quiet['serverTools']));
+        $this->assertSame('{"listChanged":false}', json_encode($quiet['serverResources']));
+
+        $empty = $hostCapabilities(['serverTools' => []]);
+        $this->assertSame('{"listChanged":false}', json_encode($empty['serverTools']));
+
+        $loud = $hostCapabilities([
+            'serverTools' => ['listChanged' => true],
+            'serverResources' => true,
+        ]);
+        $this->assertSame('{"listChanged":true}', json_encode($loud['serverTools']));
+        $this->assertSame('{"listChanged":false}', json_encode($loud['serverResources']));
+
+        $absent = $hostCapabilities(['openLinks' => true]);
+        $this->assertArrayNotHasKey('serverTools', $absent);
+        $this->assertArrayNotHasKey('serverResources', $absent);
+    }
+
+    public function testDisplayModesAreClampedToTheHostContext(): void
+    {
+        $session = $this->session([
+            $this->response(['tools' => [['name' => 'get_sales', 'inputSchema' => ['type' => 'object']]]]),
+        ], [
+            'capabilities' => ['openLinks' => true],
+            'context' => [
+                'availableDisplayModes' => ['inline', 'fullscreen'],
+                'displayMode' => 'inline',
+            ],
+        ]);
+        $session->handle($this->request('ui/initialize', [
+            'appInfo' => ['name' => 'sales-app', 'version' => '1.0.0'],
+            'appCapabilities' => ['availableDisplayModes' => ['inline', 'pip', 'fullscreen']],
+        ], 1));
+        $session->handle(['jsonrpc' => '2.0', 'method' => 'ui/notifications/initialized']);
+
+        $pip = $session->handle($this->request('ui/request-display-mode', ['mode' => 'pip']));
+        $this->assertSame(['mode' => 'inline'], $pip->response['result']);
+        $this->assertSame(McpAppAction::DISPLAY_MODE, $pip->action->type);
+
+        $fullscreen = $session->handle($this->request('ui/request-display-mode', ['mode' => 'fullscreen']));
+        $this->assertSame(['mode' => 'fullscreen'], $fullscreen->response['result']);
     }
 
     public function testToolsListAndCallStayInsideTheBoundConnector(): void
@@ -253,6 +315,20 @@ final class McpAppSessionTest extends TestCase
                 'structuredContent' => ['total' => 42],
                 '_meta' => ['timestamp' => 'now'],
                 'isError' => true,
+            ],
+        ], $session->toolResult($output));
+    }
+
+    public function testToolResultReadsTextFromContentBlocks(): void
+    {
+        $session = $this->session();
+        $output = new ToolOutput(blocks: [new TextContent('From a text block')]);
+
+        $this->assertSame([
+            'jsonrpc' => '2.0',
+            'method' => 'ui/notifications/tool-result',
+            'params' => [
+                'content' => [['type' => 'text', 'text' => 'From a text block']],
             ],
         ], $session->toolResult($output));
     }
