@@ -12,6 +12,7 @@ use NeuronAI\Skills\Skills;
 use NeuronAI\Storage\FileStorage;
 use NeuronAI\Storage\Path;
 use NeuronAI\Storage\StorageInterface;
+use NeuronAI\Tools\HasMeta;
 use NeuronAI\Tools\ToolInterface;
 use NeuronAI\Tools\Toolkits\AbstractToolkit;
 use JsonException;
@@ -64,6 +65,11 @@ class Plugin extends AbstractToolkit
 
     protected StorageInterface $storage;
 
+    /**
+     * Prepended to the name of every MCP tool of the plugin.
+     */
+    protected string $prefix = '';
+
     protected Skills $skills;
 
     /**
@@ -109,9 +115,65 @@ class Plugin extends AbstractToolkit
      */
     protected array $connectors = [];
 
-    public function __construct(string|StorageInterface $source)
+    public function __construct(/**
+     * The source the plugin was built from: a directory path or a storage object.
+     */
+        protected string|StorageInterface $source
+    ) {
+        $this->load();
+    }
+
+    /**
+     * Serialize only what is needed to rebuild the plugin: the source, the
+     * server overrides, the prefix and the toolkit filters. Connectors, tools
+     * and the skills are rebuilt on first use after unserialization.
+     *
+     * @return array<string, mixed>
+     */
+    public function __serialize(): array
     {
-        $this->storage = is_string($source) ? new FileStorage($source) : $source;
+        return [
+            'source' => $this->source,
+            'overrides' => $this->overrides,
+            'prefix' => $this->prefix,
+            'exclude' => $this->exclude,
+            'only' => $this->only,
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     */
+    public function __unserialize(array $data): void
+    {
+        $this->source = $data['source'];
+        $this->overrides = $data['overrides'];
+        $this->prefix = $data['prefix'];
+        $this->exclude = $data['exclude'];
+        $this->only = $data['only'];
+        $this->provided = null;
+        $this->connectors = [];
+        $this->errors = [];
+
+        $this->load();
+    }
+
+    /**
+     * Prefix the MCP tool names of the plugin, e.g. to keep the tools of two
+     * plugins apart. The skill tool is left untouched.
+     */
+    public function prefix(string $prefix): static
+    {
+        $this->prefix = $prefix;
+        return $this;
+    }
+
+    /**
+     * Read the manifest, the skills and the MCP configuration of the source.
+     */
+    protected function load(): void
+    {
+        $this->storage = is_string($this->source) ? new FileStorage($this->source) : $this->source;
 
         $manifest = $this->storage->read('plugin.json');
         $locations = ['skills' => 'skills', 'mcp' => 'mcp.json'];
@@ -123,7 +185,7 @@ class Plugin extends AbstractToolkit
             $locations = $this->legacyManifest();
         }
 
-        $this->skills = new Skills($this->storage, $locations['skills']);
+        $this->skills = new Skills($this->storage, $locations['skills'], null, $this->name);
         $this->loadMcp($locations['mcp'], $manifest !== null);
     }
 
@@ -221,7 +283,9 @@ class Plugin extends AbstractToolkit
 
         foreach (array_keys($this->servers) as $name) {
             try {
-                $tools = array_merge($tools, $this->connectorFor($name)->tools());
+                foreach ($this->connectorFor($name)->tools() as $tool) {
+                    $tools[] = $this->identify($tool);
+                }
             } catch (Throwable $exception) {
                 // A server that fails to connect must not break the other components of the plugin
                 $this->errors[] = "MCP server '{$name}': {$exception->getMessage()}.";
@@ -230,6 +294,27 @@ class Plugin extends AbstractToolkit
 
         // The MCP tools come first, so a tool named "skill" wins over the skill tool
         return $this->provided = array_merge($tools, $this->skills->tools());
+    }
+
+    /**
+     * Apply the prefix to an MCP tool and record the plugin it comes from in
+     * its metadata, beside the server declared by the connector.
+     */
+    protected function identify(ToolInterface $tool): ToolInterface
+    {
+        if ($this->prefix !== '') {
+            $tool->setName($this->prefix.$tool->getName());
+        }
+
+        if ($tool instanceof HasMeta) {
+            $meta = $tool->getMeta();
+            $mcp = is_array($meta['mcp'] ?? null) ? $meta['mcp'] : [];
+            $mcp['plugin'] = $this->name;
+            $meta['mcp'] = $mcp;
+            $tool->setMeta($meta);
+        }
+
+        return $tool;
     }
 
     /**

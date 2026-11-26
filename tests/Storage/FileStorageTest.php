@@ -100,6 +100,27 @@ class FileStorageTest extends TestCase
         $this->assertSame([], $this->storage->children('README.md'));
     }
 
+    public function test_reports_stats_of_files_and_directories(): void
+    {
+        $this->assertTrue($this->storage->exists('README.md'));
+        $this->assertTrue($this->storage->exists('skills/alpha'));
+        $this->assertFalse($this->storage->exists('missing.md'));
+        $this->assertFalse($this->storage->exists('../README.md'));
+
+        $this->assertTrue($this->storage->isDirectory('skills'));
+        $this->assertFalse($this->storage->isDirectory('README.md'));
+        $this->assertFalse($this->storage->isDirectory('missing'));
+
+        $this->assertSame(7, $this->storage->size('README.md'));
+        $this->assertNull($this->storage->size('skills'));
+        $this->assertNull($this->storage->size('missing.md'));
+
+        $this->assertIsInt($this->storage->modifiedAt('README.md'));
+        $this->assertIsInt($this->storage->modifiedAt('skills'));
+        $this->assertNull($this->storage->modifiedAt('missing.md'));
+        $this->assertNull($this->storage->modifiedAt('../README.md'));
+    }
+
     public function test_throws_when_the_root_is_not_a_directory(): void
     {
         $this->expectException(StorageException::class);

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace NeuronAI\Tests\Skills;
 
 use NeuronAI\Exceptions\SkillException;
+use NeuronAI\Skills\Skill;
 use NeuronAI\Skills\SkillTool;
 use NeuronAI\Skills\Skills;
 use NeuronAI\Tests\Stubs\ArrayStorage;
@@ -163,6 +164,26 @@ class SkillsTest extends TestCase
         $this->expectException(SkillException::class);
 
         Skills::make($this->root, '../skills');
+    }
+
+    public function test_serves_already_built_skills_by_id(): void
+    {
+        $storage = new ArrayStorage(['one/SKILL.md' => $this->skill('one')]);
+        $skills = [
+            'plug/one' => new Skill('one', 'The one skill.', $storage, 'one', 'plug', 'plug/one'),
+            'other/two' => new Skill('two', 'The two skill.', $storage, 'two', 'other', 'other/two'),
+        ];
+
+        $source = Skills::from($skills);
+
+        $this->assertSame(['plug/one', 'other/two'], array_keys($source->skills()));
+        $this->assertSame('plug', $source->skills()['plug/one']->getNamespace());
+
+        $tools = $source->tools();
+
+        $this->assertCount(1, $tools);
+        $this->assertStringContainsString('- plug/one: The one skill.', (string) $tools[0]->getDescription());
+        $this->assertStringContainsString('- other/two: The two skill.', (string) $tools[0]->getDescription());
     }
 
     protected function write(string $path, string $content): void

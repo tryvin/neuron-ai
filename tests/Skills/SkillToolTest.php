@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace NeuronAI\Tests\Skills;
 
 use NeuronAI\Agent\AgentState;
+use NeuronAI\Skills\Skill;
 use NeuronAI\Skills\SkillRegister;
 use NeuronAI\Skills\SkillTool;
 use NeuronAI\Skills\Skills;
@@ -63,6 +64,32 @@ class SkillToolTest extends TestCase
         $this->assertStringContainsString('Available skills:', $description);
         $this->assertStringContainsString('- alpha: Writes things.', $description);
         $this->assertStringContainsString('- beta: Reads things.', $description);
+    }
+
+    public function test_lists_namespaced_ids_and_accepts_a_unique_bare_name(): void
+    {
+        $storage = new ArrayStorage(['alpha/SKILL.md' => self::ALPHA]);
+        $tool = new SkillTool(Skills::from([
+            'plug/alpha' => new Skill('alpha', 'Writes things.', $storage, 'alpha', 'plug', 'plug/alpha'),
+        ])->skills());
+
+        $this->assertStringContainsString('- plug/alpha: Writes things.', (string) $tool->getDescription());
+        $this->assertSame("# Alpha\n\nWrite the thing.\n", ($tool)('plug/alpha'));
+        $this->assertSame("# Alpha\n\nWrite the thing.\n", ($tool)('alpha'));
+    }
+
+    public function test_refuses_an_ambiguous_bare_name(): void
+    {
+        $one = new ArrayStorage(['alpha/SKILL.md' => self::ALPHA]);
+        $two = new ArrayStorage(['beta/SKILL.md' => self::BETA]);
+        $tool = new SkillTool(Skills::from([
+            'one/dup' => new Skill('dup', 'One.', $one, 'alpha', 'one', 'one/dup'),
+            'two/dup' => new Skill('dup', 'Two.', $two, 'beta', 'two', 'two/dup'),
+        ])->skills());
+
+        $this->assertSame("Error: Unknown skill 'dup'. Available skills: one/dup, two/dup.", ($tool)('dup'));
+        $this->assertSame("# Alpha\n\nWrite the thing.\n", ($tool)('one/dup'));
+        $this->assertSame("# Beta\n", ($tool)('two/dup'));
     }
 
     public function test_loads_the_instructions_without_the_frontmatter(): void

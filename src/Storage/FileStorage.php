@@ -9,6 +9,8 @@ use NeuronAI\Exceptions\StorageException;
 use function array_diff;
 use function array_values;
 use function file_get_contents;
+use function filemtime;
+use function filesize;
 use function fopen;
 use function is_dir;
 use function is_file;
@@ -24,7 +26,7 @@ use const DIRECTORY_SEPARATOR;
  *
  * Paths resolving outside the root, also through symlinks, are refused.
  */
-class FileStorage implements StorageInterface
+class FileStorage implements StorageInterface, StorageStatInterface
 {
     public function __construct(protected string $root)
     {
@@ -80,6 +82,44 @@ class FileStorage implements StorageInterface
         $entries = scandir($resolved);
 
         return $entries === false ? [] : array_values(array_diff($entries, ['.', '..']));
+    }
+
+    public function exists(string $path): bool
+    {
+        return $this->resolve($path) !== null;
+    }
+
+    public function isDirectory(string $path): bool
+    {
+        $resolved = $this->resolve($path);
+
+        return $resolved !== null && is_dir($resolved);
+    }
+
+    public function size(string $path): ?int
+    {
+        $resolved = $this->resolve($path);
+
+        if ($resolved === null || !is_file($resolved)) {
+            return null;
+        }
+
+        $size = filesize($resolved);
+
+        return $size === false ? null : $size;
+    }
+
+    public function modifiedAt(string $path): ?int
+    {
+        $resolved = $this->resolve($path);
+
+        if ($resolved === null) {
+            return null;
+        }
+
+        $modified = filemtime($resolved);
+
+        return $modified === false ? null : $modified;
     }
 
     /**

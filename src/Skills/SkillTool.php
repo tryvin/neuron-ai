@@ -52,7 +52,7 @@ class SkillTool extends Tool implements HasRunKey, HasWorkflowState
         parent::__construct(
             name: 'skill',
             properties: [
-                new ToolProperty('name', PropertyType::STRING, 'Name of the skill.', true),
+                new ToolProperty('name', PropertyType::STRING, 'Id of the skill. A bare name works when only one skill has it.', true),
                 new ToolProperty('file', PropertyType::STRING, 'Optional path of a file bundled with the skill, relative to the skill folder.', false),
             ],
         );
@@ -82,12 +82,12 @@ class SkillTool extends Tool implements HasRunKey, HasWorkflowState
     {
         $lines = [
             'Load the instructions of a skill, or read a file bundled with it.',
-            "Call with the name of the skill to get its instructions. Call again with the name and a file to read a bundled file the instructions refer to.",
+            "Call with the id of the skill to get its instructions. A bare name works when only one skill has it. Call again with the id and a file to read a bundled file the instructions refer to.",
             'Available skills:',
         ];
 
         foreach ($this->register()->all() as $skill) {
-            $lines[] = "- {$skill->getName()}: {$skill->getDescription()}";
+            $lines[] = "- {$skill->getId()}: {$skill->getDescription()}";
         }
 
         return implode("\n", $lines);

@@ -33,9 +33,15 @@ class Skills extends AbstractToolkit
      */
     protected const NAME_PATTERN = '/^[a-z0-9]+(?:-[a-z0-9]+)*$/D';
 
-    protected StorageInterface $storage;
+    protected ?StorageInterface $storage = null;
 
-    protected string $directory;
+    protected string $directory = '';
+
+    /**
+     * The namespace given to the discovered skills: the directory they were
+     * found in, unless the caller supplied another one.
+     */
+    protected string $namespace = '';
 
     /**
      * @var array<string, Skill>
@@ -47,13 +53,47 @@ class Skills extends AbstractToolkit
      */
     protected array $errors = [];
 
-    public function __construct(string|StorageInterface $source, string $directory = '')
-    {
+    /**
+     * @param array<string, Skill>|null $skills Already-built skills, keyed by id. When given, no discovery happens.
+     */
+    public function __construct(
+        string|StorageInterface|null $source = null,
+        string $directory = '',
+        ?array $skills = null,
+        string $namespace = '',
+    ) {
+        if ($skills !== null) {
+            $this->skills = $skills;
+            return;
+        }
+
+        if ($source === null) {
+            throw new SkillException('A source is needed to discover skills.');
+        }
+
         $this->storage = is_string($source) ? new FileStorage($source) : $source;
         $this->directory = Path::normalize($directory)
             ?? throw new SkillException("The skills directory '{$directory}' is not a valid relative path.");
+        $this->namespace = $namespace !== '' ? $namespace : $this->directory;
 
         $this->discover();
+    }
+
+    /**
+     * Build a source from already-built skills, keyed by id. They are served by
+     * the same tool and register as the discovered ones.
+     *
+     * @param array<string, Skill> $skills
+     */
+    public static function from(array $skills): self
+    {
+        $indexed = [];
+
+        foreach ($skills as $skill) {
+            $indexed[$skill->getId()] = $skill;
+        }
+
+        return new self(skills: $indexed);
     }
 
     public function provide(): array
@@ -83,6 +123,10 @@ class Skills extends AbstractToolkit
 
     protected function discover(): void
     {
+        if (!$this->storage instanceof StorageInterface) {
+            return;
+        }
+
         foreach ($this->storage->children($this->directory) as $name) {
             // A skill is a folder holding a SKILL.md file
             $path = Path::normalize($this->directory === '' ? $name : $this->directory.'/'.$name);
@@ -99,6 +143,12 @@ class Skills extends AbstractToolkit
 
     protected function load(string $folder, string $path, string $content): void
     {
+        $storage = $this->storage;
+
+        if (!$storage instanceof StorageInterface) {
+            return;
+        }
+
         try {
             $parsed = Frontmatter::parse($content);
         } catch (SkillException $exception) {
@@ -152,6 +202,12 @@ class Skills extends AbstractToolkit
             $this->errors[] = "Skill '{$folder}': ".implode('; ', $notices).'. Loaded anyway.';
         }
 
-        $this->skills[$name] = new Skill($name, trim($description), $this->storage, $path);
+        $this->skills[$name] = new Skill(
+            $name,
+            trim($description),
+            $storage,
+            $path,
+            $this->namespace,
+        );
     }
 }

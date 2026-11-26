@@ -11,6 +11,7 @@ use NeuronAI\MCP\McpConnector;
 use NeuronAI\Plugins\Plugin;
 use NeuronAI\Skills\SkillTool;
 use NeuronAI\Tests\Stubs\ArrayStorage;
+use NeuronAI\Tools\HasMeta;
 use NeuronAI\Tools\ToolInterface;
 use PHPUnit\Framework\TestCase;
 
@@ -19,8 +20,10 @@ use function file_get_contents;
 use function implode;
 use function json_encode;
 use function parse_url;
+use function serialize;
 use function str_repeat;
 use function stream_get_contents;
+use function unserialize;
 use function array_keys;
 
 use const JSON_THROW_ON_ERROR;
@@ -661,6 +664,58 @@ class PluginTest extends TestCase
         $this->expectException(PluginException::class);
 
         $plugin->appSession('missing', ['view' => 'view_1', 'tool' => 'server_tool']);
+    }
+
+    public function test_prefixes_the_mcp_tools_and_records_the_plugin_identity(): void
+    {
+        $plugin = $this->plugin([
+            'skills/alpha/SKILL.md' => $this->skill('alpha'),
+            'mcp.json' => self::mcp([
+                'acme' => ['type' => 'streamable-http', 'url' => 'https://mcp.acme.example/mcp'],
+            ]),
+        ])->prefix('acme_');
+
+        $tools = $plugin->tools();
+
+        // Only the MCP tools carry the prefix
+        $this->assertSame(['acme_server_tool', 'skill'], $this->names($tools));
+
+        $tool = $tools[0];
+
+        $this->assertInstanceOf(HasMeta::class, $tool);
+
+        $meta = $tool->getMeta();
+
+        $this->assertSame('acme', $meta['mcp']['plugin']);
+        $this->assertArrayHasKey('server', $meta['mcp']);
+    }
+
+    public function test_survives_serialization_and_rebuilds_connectors_lazily(): void
+    {
+        $plugin = $this->plugin([
+            'skills/alpha/SKILL.md' => $this->skill('alpha'),
+            'mcp.json' => self::mcp([
+                'acme' => ['type' => 'streamable-http', 'url' => 'https://mcp.acme.example/mcp'],
+            ]),
+        ])->prefix('acme_')->server('acme', ['token' => 'secret']);
+
+        // The tools and the connectors are not serialized
+        $this->assertStringNotContainsString('McpConnector', serialize($plugin));
+
+        $restored = unserialize(serialize($plugin));
+
+        $this->assertInstanceOf(FakePlugin::class, $restored);
+        $this->assertSame([], $restored->configs);
+        $this->assertSame(['acme_server_tool', 'skill'], $this->names($restored->tools()));
+        $this->assertSame(
+            [['url' => 'https://mcp.acme.example/mcp', 'headers' => [], 'token' => 'secret']],
+            $restored->configs
+        );
+
+        $tool = $restored->tools()[0];
+
+        $this->assertInstanceOf(HasMeta::class, $tool);
+        $this->assertSame('acme', $tool->getMeta()['mcp']['plugin']);
     }
 
     public function test_it_does_not_rebuild_a_connector_that_failed(): void

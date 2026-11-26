@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace NeuronAI\Skills;
 
+use function count;
+
 /**
- * The skills available to an agent, by name.
+ * The skills available to an agent, by id.
  *
  * The register is shared by every skill tool through the workflow state, so one tool can serve
  * the skills of all the registered sources.
@@ -23,21 +25,22 @@ final class SkillRegister
     protected array $skills = [];
 
     /**
-     * The paths of the skills ignored because their name was already taken, by name.
+     * The paths of the skills ignored because their id was already taken, by id.
      *
      * @var array<string, string>
      */
     protected array $skipped = [];
 
     /**
-     * Add skills. The first skill registered with a name wins: a different skill with the same name is ignored.
+     * Add skills. The first skill registered with an id wins: a different skill with the same id is ignored.
      *
-     * @param array<string, Skill> $skills
+     * @param array<array-key, Skill> $skills
      */
     public function add(array $skills): void
     {
         foreach ($skills as $skill) {
-            $existing = $this->skills[$skill->getName()] ?? null;
+            $id = $skill->getId();
+            $existing = $this->skills[$id] ?? null;
 
             // The same skill registered again, e.g. when the tools are bootstrapped once more
             if ($existing === $skill) {
@@ -45,17 +48,32 @@ final class SkillRegister
             }
 
             if ($existing !== null) {
-                $this->skipped[$skill->getName()] = $skill->getPath();
+                $this->skipped[$id] = $skill->getPath();
                 continue;
             }
 
-            $this->skills[$skill->getName()] = $skill;
+            $this->skills[$id] = $skill;
         }
     }
 
-    public function get(string $name): ?Skill
+    /**
+     * A skill by exact id, or by bare name when exactly one skill has it.
+     */
+    public function get(string $id): ?Skill
     {
-        return $this->skills[$name] ?? null;
+        if (isset($this->skills[$id])) {
+            return $this->skills[$id];
+        }
+
+        $matches = [];
+
+        foreach ($this->skills as $skill) {
+            if ($skill->getName() === $id) {
+                $matches[] = $skill;
+            }
+        }
+
+        return count($matches) === 1 ? $matches[0] : null;
     }
 
     /**

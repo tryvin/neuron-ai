@@ -83,10 +83,16 @@ Related guides: `src/Skills/AGENTS.md` for skills alone, `src/MCP/AGENTS.md` for
 
 ## What the Agent Gets
 
-- **The MCP tools of the plugin**, with their original names.
+- **The MCP tools of the plugin**, with their original names, prefixed when `prefix()` is set.
 - **One `skill` tool** listing the skills of the plugin with their descriptions. When a task matches a skill, the model calls `skill(name)` and gets its instructions. It can then read the files bundled with the skill with `skill(name, file)`. Nothing enters the context before that call. Details in `src/Skills/AGENTS.md`.
 
-With several plugins, or plugins and `Skills` together, all the skills appear in the same single `skill` tool. Two tools with the same name (two plugins, or a plugin and a tool of the project): the first registered wins and the other is dropped.
+With several plugins, or plugins and `Skills` together, all the skills appear in the same single `skill` tool. Two tools with the same name (two plugins, or a plugin and a tool of the project): the first registered wins and the other is dropped. A prefix keeps the MCP tools of two plugins apart:
+
+```php
+Plugin::make($dir)->prefix('acme_'); // acme_search, acme_create_page, ...
+```
+
+Every MCP tool carries its origin in the metadata: `mcp.plugin` is the name of the manifest, beside the `mcp.server` the connector declared. The skill tool is never prefixed and carries no plugin metadata.
 
 To use only the MCP servers of a plugin, opt its skills out: `->exclude([\NeuronAI\Skills\SkillTool::class])`.
 
@@ -225,6 +231,8 @@ Only HTTP servers are supported.
 
 The servers are contacted when `tools()` is called, once per plugin instance. Each server's connector is memoized: `connectorFor()` and `appSession()` reuse the one that listed the agent's tools, so a server is never contacted twice per plugin instance. `errors()` grows as the plugin is used: connection failures appear there after that call.
 
+A plugin survives `serialize()`/`unserialize()`: only the source, the `server()` overrides, the prefix and the toolkit filters travel. Connectors, tools and the skills are rebuilt on first use after unserialization, and the servers are still contacted lazily.
+
 ## Troubleshooting
 
 | Message | Cause |
@@ -294,6 +302,7 @@ Write instructions for the model, not for a human: say when to use a skill, and 
 |--------|---------|
 | `Plugin::make($source)` | The plugin. `$source` is a directory or a `StorageInterface`. Throws when the manifest is unusable |
 | `->server($name, $config)` | The plugin, with the credentials of one server |
+| `->prefix($prefix)` | The plugin, prepending the prefix to every MCP tool name |
 | `->tools()` | The MCP tools, then the skill tool. Contacts the servers once |
 | `->connectorFor($name)` | The memoized `McpConnector` of one server |
 | `->appSession($name, $config)` | An `McpAppSession` bound to one server's connector |
