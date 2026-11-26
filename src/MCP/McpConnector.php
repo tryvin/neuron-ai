@@ -12,6 +12,7 @@ use NeuronAI\Tools\ObjectProperty;
 use NeuronAI\Tools\PropertyType;
 use NeuronAI\Tools\Tool;
 use NeuronAI\Tools\ToolInterface;
+use NeuronAI\Tools\ToolOutput;
 use NeuronAI\Tools\ToolProperty;
 use Exception;
 use ReflectionException;
@@ -19,11 +20,12 @@ use ReflectionException;
 use function array_filter;
 use function array_key_exists;
 use function array_map;
-use function call_user_func;
 use function in_array;
 use function is_array;
 use function is_null;
 use function is_string;
+use function json_encode;
+use function parse_url;
 
 /**
  * @method static static make(array<string, mixed> $config)
@@ -45,6 +47,14 @@ class McpConnector
     protected array $only = [];
 
     /**
+     * Raw tool definitions from the server, as returned by tools/list.
+     * Fetched once per connector instance, not kept through serialization.
+     *
+     * @var list<array<string, mixed>>|null
+     */
+    protected ?array $rawTools = null;
+
+    /**
      * @param array<string, mixed> $config
      */
     public function __construct(protected array $config)
@@ -57,6 +67,28 @@ class McpConnector
     protected function client(): McpClient
     {
         return $this->client ??= new McpClient($this->config);
+    }
+
+    /**
+     * Label of this server, for audit, policies and view binding. It is the
+     * "name" entry of the configuration. Without one: the URL without what
+     * must never reach history (credentials, query, fragment), or the command.
+     */
+    public function name(): string
+    {
+        $name = $this->config['name'] ?? null;
+
+        if (is_string($name) && $name !== '') {
+            return $name;
+        }
+
+        if (is_string($this->config['url'] ?? null) && is_array($parts = parse_url($this->config['url']))) {
+            return ($parts['scheme'] ?? '') . '://' . ($parts['host'] ?? '')
+                . (isset($parts['port']) ? ":{$parts['port']}" : '')
+                . ($parts['path'] ?? '');
+        }
+
+        return (string) ($this->config['command'] ?? '');
     }
 
     public function __serialize(): array
@@ -131,6 +163,9 @@ class McpConnector
     /**
      * Get the list of available Tools from the server.
      *
+     * Tools built for an app only (_meta.ui.visibility without "model") stay
+     * out of it: the agent must neither see nor call them.
+     *
      * @return ToolInterface[]
      * @throws Exception
      */
@@ -138,13 +173,42 @@ class McpConnector
     {
         // Filter by the only and exclude preferences.
         $tools = array_filter(
-            $this->client()->listTools(),
+            $this->rawTools(),
             fn (array $tool): bool =>
+                $this->hasVisibility($tool, 'model') &&
                 !in_array($tool['name'], $this->exclude) &&
                 ($this->only === [] || in_array($tool['name'], $this->only)),
         );
 
         return array_map($this->createTool(...), $tools);
+    }
+
+    /**
+     * Every tool the server declared, exactly as returned by tools/list:
+     * app-only tools and _meta included.
+     *
+     * @return list<array<string, mixed>>
+     *
+     * @throws McpException
+     */
+    public function rawTools(): array
+    {
+        return $this->rawTools ??= $this->client()->listTools();
+    }
+
+    /**
+     * Whether a tool is built for the given audience, "model" or "app".
+     *
+     * _meta.ui.visibility defaults to both when the server does not
+     * declare it.
+     *
+     * @param array<string, mixed> $tool
+     */
+    protected function hasVisibility(array $tool, string $audience): bool
+    {
+        $visibility = $tool['_meta']['ui']['visibility'] ?? null;
+
+        return ! is_array($visibility) || in_array($audience, $visibility, true);
     }
 
     /**
@@ -161,7 +225,7 @@ class McpConnector
             name: $item['name'],
             description: $item['description'] ?? null,
             annotations: $item['annotations'] ?? [],
-        )->setCallable(
+        )->setMeta($this->toolMetadata($item))->setCallable(
             new CallableMcpTool(
                 connector: $this,
                 item: $item,
@@ -237,13 +301,83 @@ class McpConnector
     }
 
     /**
+     * What a tool is, that the model never sees: the server it comes from
+     * and, when it declares one, the UI resource an app renders it with.
+     *
+     * @param array<string, mixed> $item
+     * @return array<string, mixed>
+     */
+    protected function toolMetadata(array $item): array
+    {
+        $meta = ['mcp' => ['server' => $this->name()]];
+
+        $ui = $item['_meta']['ui'] ?? null;
+
+        if (is_array($ui)) {
+            $meta['mcp']['ui'] = $ui;
+        } elseif (is_string($item['_meta']['ui/resourceUri'] ?? null)) {
+            // Deprecated flat form: read it under the current shape, never write it.
+            $meta['mcp']['ui'] = ['resourceUri' => $item['_meta']['ui/resourceUri']];
+        }
+
+        return $meta;
+    }
+
+    /**
      * This might look counter-intuitive, but when dealing with interrupts and serialization PHP doesnt allow for MCP connectors serialization
+     *
+     * Returns the raw content blocks of the result, or an empty string.
+     *
+     * @param array<string, mixed> $item
+     * @param array<string, mixed> $arguments
+     *
      * @throws McpException
      */
     public function invokeTool(array $item, array $arguments): mixed
     {
-        $response = call_user_func(
-            $this->client()->callTool(...),
+        $result = $this->callToolResult($item, $arguments);
+
+        return array_key_exists('content', $result) ? $result['content'] : '';
+    }
+
+    /**
+     * Call a tool and return the whole result: the text the model reads, the
+     * structured content an app reads and what the server said about it.
+     *
+     * @param array<string, mixed> $item
+     * @param array<string, mixed> $arguments
+     *
+     * @throws McpException
+     */
+    public function invokeToolResult(array $item, array $arguments): ToolOutput
+    {
+        $result = $this->callToolResult($item, $arguments);
+
+        $mcp = ['isError' => ($result['isError'] ?? null) === true];
+
+        if (is_array($result['_meta'] ?? null)) {
+            $mcp['resultMeta'] = $result['_meta'];
+        }
+
+        return new ToolOutput(
+            text: $this->resultText($result),
+            structuredContent: is_array($result['structuredContent'] ?? null) ? $result['structuredContent'] : null,
+            meta: ['mcp' => $mcp],
+        );
+    }
+
+    /**
+     * Send tools/call for a raw tool definition and return the server's result.
+     *
+     * @param array<string, mixed> $item
+     * @param array<string, mixed> $arguments
+     * @return array<string, mixed>
+     *
+     * @throws McpException
+     */
+    protected function callToolResult(array $item, array $arguments): array
+    {
+        $response = $this->client()->callTool(
             $item['name'],
             $arguments,
             $this->paramHeadersFor($item, $arguments)
@@ -253,11 +387,31 @@ class McpConnector
             throw new McpException($response['error']['message'], $response['error']['code'] ?? 0);
         }
 
-        if (isset($response['result']) && is_array($response['result']) && array_key_exists('content', $response['result'])) {
-            return $response['result']['content'];
+        return is_array($response['result'] ?? null) ? $response['result'] : [];
+    }
+
+    /**
+     * The text the model reads: what invokeTool() has always produced, the
+     * content blocks as JSON. A result with no content, or an empty one, is
+     * built for an app that reads structuredContent: the model then gets
+     * that as JSON instead of an empty result.
+     *
+     * @param array<string, mixed> $result
+     */
+    protected function resultText(array $result): string
+    {
+        $content = $result['content'] ?? null;
+
+        if (is_array($content) && $content !== []) {
+            return (string) json_encode($content);
         }
 
-        return '';
+        if (isset($result['structuredContent'])) {
+            return (string) json_encode($result['structuredContent']);
+        }
+
+        // Still what invokeTool() always produced: "[]" for an empty content, "" for none.
+        return is_array($content) ? '[]' : (string) $content;
     }
 
     /**

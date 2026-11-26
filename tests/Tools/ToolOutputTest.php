@@ -221,4 +221,31 @@ class ToolOutputTest extends TestCase
         // getResult joins text blocks
         $this->assertSame('block-a block-b', $tool->getResult());
     }
+
+    public function test_structured_content_and_meta_default_to_empty(): void
+    {
+        $output = ToolOutput::text('hello');
+
+        $this->assertNull($output->structuredContent);
+        $this->assertSame([], $output->meta);
+    }
+
+    public function test_structured_content_and_meta_are_kept_apart_from_the_text(): void
+    {
+        $meta = ['mcp' => ['isError' => true, 'resultMeta' => ['timestamp' => 'now']]];
+
+        $output = new ToolOutput(
+            text: 'model text',
+            structuredContent: ['total' => 42],
+            meta: $meta,
+        );
+
+        $this->assertSame('model text', $output->getText());
+        $this->assertSame(['total' => 42], $output->structuredContent);
+        $this->assertSame($meta, $output->meta);
+
+        $serialized = json_decode(json_encode($output), true);
+        $this->assertSame(['total' => 42], $serialized['structuredContent']);
+        $this->assertSame($meta, $serialized['meta']);
+    }
 }

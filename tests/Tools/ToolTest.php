@@ -11,6 +11,7 @@ use NeuronAI\Tests\Stubs\Tools\TestToolClassOnlyParentConstructorFluent;
 use NeuronAI\Tests\Stubs\Tools\TestToolClassWithParentConstructor;
 use NeuronAI\Tests\Stubs\Tools\TestToolClassWithParentConstructorMixed;
 use NeuronAI\Tools\ArrayProperty;
+use NeuronAI\Tools\HasMeta;
 use NeuronAI\Tools\ObjectProperty;
 use NeuronAI\Tools\PropertyType;
 use NeuronAI\Tools\Tool;
@@ -18,6 +19,8 @@ use NeuronAI\Tools\ToolInterface;
 use NeuronAI\Tools\ToolProperty;
 use PHPUnit\Framework\TestCase;
 use Error;
+
+use function json_encode;
 
 class ToolTest extends TestCase
 {
@@ -33,6 +36,33 @@ class ToolTest extends TestCase
         $this->assertEquals(null, $tool->getCallId());
         $tool->setCallId('test');
         $this->assertEquals('test', $tool->getCallId());
+    }
+
+    public function test_meta_is_empty_by_default_and_set_fluently(): void
+    {
+        $tool = new Tool('example', 'example');
+
+        $this->assertInstanceOf(HasMeta::class, $tool);
+        $this->assertSame([], $tool->getMeta());
+        $this->assertSame($tool, $tool->setMeta(['mcp' => ['server' => 'erp']]));
+        $this->assertSame(['mcp' => ['server' => 'erp']], $tool->getMeta());
+    }
+
+    public function test_meta_can_be_passed_to_the_constructor(): void
+    {
+        $this->assertSame(
+            ['mcp' => ['server' => 'erp']],
+            (new Tool('example', 'example', meta: ['mcp' => ['server' => 'erp']]))->getMeta()
+        );
+    }
+
+    public function test_meta_is_serialized_as_an_object(): void
+    {
+        $this->assertSame('{}', json_encode(Tool::make('example', 'example')->jsonSerialize()['meta']));
+        $this->assertSame(
+            '{"mcp":{"server":"erp"}}',
+            json_encode(Tool::make('example', 'example')->setMeta(['mcp' => ['server' => 'erp']])->jsonSerialize()['meta'])
+        );
     }
 
     public function test_required_properties(): void

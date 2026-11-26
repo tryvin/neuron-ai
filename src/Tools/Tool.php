@@ -22,9 +22,9 @@ use function json_encode;
 use function method_exists;
 
 /**
- * @method static static make(?string $name = null, ?string $description = null, array $properties = [], array $parameters = [], array $annotations = [])
+ * @method static static make(?string $name = null, ?string $description = null, array $properties = [], array $parameters = [], array $annotations = [], array $meta = [])
  */
-class Tool implements ToolInterface, HasOutput
+class Tool implements ToolInterface, HasOutput, HasMeta
 {
     use StaticConstructor;
 
@@ -58,16 +58,21 @@ class Tool implements ToolInterface, HasOutput
     /**
      * Tool constructor.
      *
+     * $meta carries information about the tool that never reaches the model,
+     * namespaced by the component that produced it (e.g. "mcp").
+     *
      * @param ToolPropertyInterface[] $properties
      * @params array<int, mixed>|null $parameters
      * @params array<int, mixed>|null $annotations
+     * @param array<string, mixed> $meta
      */
     public function __construct(
         protected string $name,
         protected ?string $description = null,
         protected array $properties = [],
         protected array $parameters = [],
-        protected array $annotations = []
+        protected array $annotations = [],
+        protected array $meta = []
     ) {
     }
 
@@ -135,6 +140,24 @@ class Tool implements ToolInterface, HasOutput
     public function getAnnotations(): array
     {
         return $this->annotations;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function getMeta(): array
+    {
+        return $this->meta;
+    }
+
+    /**
+     * @param array<string, mixed> $meta
+     */
+    public function setMeta(array $meta): static
+    {
+        $this->meta = $meta;
+
+        return $this;
     }
 
     public function setParameters(array $parameters): self
@@ -312,6 +335,7 @@ class Tool implements ToolInterface, HasOutput
             'description' => $this->description,
             'parameters' => $this->parameters,
             'inputs' => $this->inputs === [] ? new stdClass() : $this->inputs,
+            'meta' => $this->meta === [] ? new stdClass() : $this->meta,
             'result' => $this->getResult(),
             'resultOutput' => $this->result,
         ];

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace NeuronAI\MCP;
 
+use NeuronAI\Tools\ToolOutput;
+
 class CallableMcpTool
 {
     public function __construct(
@@ -12,9 +14,9 @@ class CallableMcpTool
     ) {
     }
 
-    public function __invoke(...$arguments): mixed
+    public function __invoke(...$arguments): ToolOutput
     {
-        return $this->connector->invokeTool(
+        return $this->connector->invokeToolResult(
             item: $this->item,
             arguments: $arguments
         );

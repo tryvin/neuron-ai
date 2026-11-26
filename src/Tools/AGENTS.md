@@ -10,6 +10,7 @@ Tool system for agent capabilities. Tools are callable functions exposed to AI.
 | `Tool.php` | Base class with property definitions |
 | `ToolOutput.php` | DTO carrying a tool's result (text and/or `ContentBlockInterface[]`) |
 | `HasOutput.php` | Opt-in interface for tools that expose `getOutput(): ToolOutput` |
+| `HasMeta.php` | Opt-in interface for tools that carry `getMeta()` / `setMeta()` |
 | `HasInterrupt.php` | Interface for tools that can signal workflow interrupts |
 | `InterruptHandler.php` | Trait providing interrupt/resume storage for `HasInterrupt` tools |
 | `HasWorkflowState.php` | Opt-in interface for tools that receive the workflow state when the tools are bootstrapped |
@@ -47,10 +48,61 @@ class CaptureTool extends Tool
 |--------|---------|
 | `ToolOutput::text(string $text)` | Static factory, text-only result |
 | `ToolOutput::blocks(ContentBlockInterface[] $blocks)` | Static factory, blocks-only result |
-| `new ToolOutput(?string $text = null, array $blocks = [])` | Mixed (text + blocks) |
+| `new ToolOutput(?string $text = null, array $blocks = [], ?array $structuredContent = null, array $meta = [])` | Mixed (text + blocks), plus data for the application |
 | `hasBlocks()` | `true` when blocks were provided |
 | `getBlocks()` | `ContentBlockInterface[]` |
 | `getText()` | Explicit text, or concatenation of `TextContent` blocks, or `null` |
+
+### Data for the application
+
+A result often carries more than the model should read. Two optional constructor
+arguments keep that apart from the text:
+
+```php
+return new ToolOutput(
+    text: 'Total: 42',                      // the model reads this
+    structuredContent: ['total' => 42],    // the application reads this
+    meta: ['mcp' => ['isError' => false]], // and this
+);
+```
+
+| Property | Type | Read by |
+|----------|------|---------|
+| `structuredContent` | `array\|null` | The application, e.g. a UI rendering the result |
+| `meta` | `array` | The application: flags and provenance of this execution |
+
+Provider mappers and the token counter read the text and the blocks only, so
+neither property costs tokens or reaches the model. Both survive chat history.
+`Tool::meta` describes the tool (see below); `ToolOutput::meta` describes one
+execution.
+
+## Tool Metadata (HasMeta)
+
+A tool can carry information about itself that the model never sees. `Tool`
+implements `HasMeta`; any `ToolInterface` implementation can opt in the same
+way.
+
+```php
+use NeuronAI\Tools\Tool;
+
+class GetSalesTool extends Tool
+{
+    public function __construct()
+    {
+        parent::__construct('get_sales', 'Sales by region', meta: [
+            'mcp' => ['server' => 'erp'],
+        ]);
+    }
+}
+
+// Or later: $tool->setMeta([...]) and $tool->getMeta()
+```
+
+- `getMeta()` returns the whole array, `setMeta()` replaces it.
+- Namespace the keys by the component that produced them, as MCP tools do
+  with `mcp`. Two components never overwrite each other.
+- Provider mappers ignore it. It survives chat history and travels with the
+  tool in `ToolCallChunk` and `ToolResultChunk`.
 
 ### Provider support
 
@@ -70,7 +122,7 @@ Provider mappers honour blocks where the underlying API natively accepts them, a
 
 - `Tool::getResult(): string` — backwards-compatible string (explicit text or concatenated text blocks). Still declared on `ToolInterface`.
 - `Tool::getOutput(): ToolOutput` — structured payload. Declared on the `HasOutput` interface (which `Tool` implements); any `ToolInterface` implementation can opt in by implementing `HasOutput`. Provider mappers detect rich output via `instanceof HasOutput`, not by coupling to the concrete `Tool` class.
-- `Tool::jsonSerialize()` — emits both keys: `result` (string, BC) and `resultOutput` (the `ToolOutput` payload).
+- `Tool::jsonSerialize()` — emits both keys: `result` (string, BC) and `resultOutput` (the `ToolOutput` payload). It also emits `meta`, as an object.
 
 ## Creating Custom Tools
 

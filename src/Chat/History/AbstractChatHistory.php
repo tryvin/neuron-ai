@@ -178,7 +178,8 @@ abstract class AbstractChatHistory implements ChatHistoryInterface
         $tools = array_map(fn (array $tool) => Tool::make($tool['name'], $tool['description'])
             ->setParameters($tool['parameters'] ?? [])
             ->setInputs($tool['inputs'])
-            ->setCallId($tool['callId'] ?? null), $message['tools']);
+            ->setCallId($tool['callId'] ?? null)
+            ->setMeta($this->deserializeToolMeta($tool)), $message['tools']);
 
         $item = new ToolCallMessage(tools: $tools);
 
@@ -199,16 +200,22 @@ abstract class AbstractChatHistory implements ChatHistoryInterface
         $tools = array_map(function (array $tool): Tool {
             $toolInstance = Tool::make($tool['name'], $tool['description'])
                 ->setInputs($tool['inputs'])
-                ->setCallId($tool['callId']);
+                ->setCallId($tool['callId'])
+                ->setMeta($this->deserializeToolMeta($tool));
 
-            if (isset($tool['resultOutput']) && is_array($tool['resultOutput']) && isset($tool['resultOutput']['blocks']) && $tool['resultOutput']['blocks'] !== []) {
-                $blocks = array_map(
-                    $this->deserializeContentBlock(...),
-                    $tool['resultOutput']['blocks']
-                );
+            $output = is_array($tool['resultOutput'] ?? null) ? $tool['resultOutput'] : [];
+            $blocks = isset($output['blocks']) && $output['blocks'] !== []
+                ? array_map($this->deserializeContentBlock(...), $output['blocks'])
+                : [];
+            $structuredContent = is_array($output['structuredContent'] ?? null) ? $output['structuredContent'] : null;
+            $meta = is_array($output['meta'] ?? null) ? $output['meta'] : [];
+
+            if ($blocks !== [] || $structuredContent !== null || $meta !== []) {
                 $toolInstance->setResult(new ToolOutput(
-                    text: $tool['resultOutput']['text'] ?? null,
+                    text: $output['text'] ?? null,
                     blocks: $blocks,
+                    structuredContent: $structuredContent,
+                    meta: $meta,
                 ));
             } else {
                 $toolInstance->setResult($tool['result']);
@@ -218,6 +225,18 @@ abstract class AbstractChatHistory implements ChatHistoryInterface
         }, $message['tools']);
 
         return new ToolResultMessage($tools);
+    }
+
+    /**
+     * The metadata a persisted tool carries, empty for histories written
+     * before tools had any.
+     *
+     * @param array<string, mixed> $tool
+     * @return array<string, mixed>
+     */
+    protected function deserializeToolMeta(array $tool): array
+    {
+        return is_array($tool['meta'] ?? null) ? $tool['meta'] : [];
     }
 
     /**

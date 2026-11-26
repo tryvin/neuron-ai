@@ -153,6 +153,60 @@ $connector->capabilities();                                   // full server cap
 An extension Neuron does not interpret is preserved as received. A server that
 omits an extension does not support it: the application decides how to degrade.
 
+## Tool Visibility and Results
+
+### App-only tools
+
+A server built for [MCP Apps](https://modelcontextprotocol.io/extensions/apps/overview)
+can mark a tool with `_meta.ui.visibility: ["app"]`: the tool exists for a UI,
+not for the agent. `tools()` leaves such tools out, as the specification
+requires. A tool without a declared visibility is for both.
+
+`only()` and `exclude()` are further filters for the model. `rawTools()` returns
+every tool as the server declared it, `_meta` included, and is fetched once per
+connector:
+
+```php
+$connector->rawTools(); // App-only tools included
+```
+
+### Tool metadata
+
+Each tool carries where it comes from, under the `mcp` key of `Tool::getMeta()`:
+
+```php
+$tool->getMeta();
+// ['mcp' => ['server' => 'erp', 'ui' => ['resourceUri' => 'ui://sales/dashboard.html']]]
+```
+
+- `server` is the connector label, `name()`: the `name` entry of the
+  configuration or, without one, the URL without credentials, query and
+  fragment, or the command.
+- `ui` is the `_meta.ui` of the tool. The deprecated flat
+  `_meta["ui/resourceUri"]` is read under the same shape.
+
+### Whole results
+
+An MCP tool returns a `ToolOutput` with the whole result:
+
+| Property | Holds |
+|----------|-------|
+| `text` | What the model reads |
+| `structuredContent` | The `structuredContent` of the result, for a UI |
+| `meta['mcp']['isError']` | Whether the server reported `isError` |
+| `meta['mcp']['resultMeta']` | The `_meta` the server put on the result |
+
+The text is what earlier versions produced: the content blocks as JSON. A
+result with no content, or an empty one, gives the model `structuredContent` as
+JSON instead of an empty result.
+
+```php
+$output = $connector->invokeToolResult(item: $rawTool, arguments: ['region' => 'emea']);
+```
+
+`invokeTool()` keeps returning the raw content blocks. The output does not
+repeat the server label or the tool name: the `Tool` beside it has them.
+
 ## Multiple MCP Servers
 
 ```php

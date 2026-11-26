@@ -11,6 +11,7 @@ use NeuronAI\Chat\Messages\ToolResultMessage;
 use NeuronAI\Providers\Anthropic\MessageMapper as AnthropicMessageMapper;
 use NeuronAI\Providers\AWS\MessageMapper as AWSMessageMapper;
 use NeuronAI\Providers\Gemini\MessageMapper as GeminiMessageMapper;
+use NeuronAI\Providers\MessageMapperInterface;
 use NeuronAI\Providers\Mistral\MessageMapper as MistralMessageMapper;
 use NeuronAI\Providers\OpenAI\MessageMapper as OpenAIMessageMapper;
 use NeuronAI\Providers\OpenAI\Responses\MessageMapper as OpenAIResponsesMessageMapper;
@@ -279,6 +280,42 @@ class ToolOutputMapperTest extends TestCase
             $json = (string) json_encode($decoded);
             $this->assertStringContainsString('from-custom', $json, $mapper::class . ' did not honor HasOutput');
         }
+    }
+
+    public function test_no_mapper_sends_structured_content_or_metadata_to_the_model(): void
+    {
+        // What an app reads and what a backend reads must stay out of the request.
+        $tool = Tool::make('sales', 'sales by region', meta: ['mcp' => ['server' => 'TOOL-META-MARKER']])
+            ->setCallId('call_1')
+            ->setResult(new ToolOutput(
+                text: 'MODEL-TEXT-MARKER',
+                structuredContent: ['STRUCTURED-MARKER' => true],
+                meta: ['mcp' => ['isError' => false, 'resultMeta' => ['OUTPUT-META-MARKER' => true]]],
+            ));
+
+        foreach ($this->mappers() as $mapper) {
+            $json = (string) json_encode($this->decode($mapper->map([new ToolResultMessage([$tool])])));
+
+            $this->assertStringContainsString('MODEL-TEXT-MARKER', $json, $mapper::class);
+            $this->assertStringNotContainsString('STRUCTURED-MARKER', $json, $mapper::class);
+            $this->assertStringNotContainsString('OUTPUT-META-MARKER', $json, $mapper::class);
+            $this->assertStringNotContainsString('TOOL-META-MARKER', $json, $mapper::class);
+        }
+    }
+
+    /**
+     * @return array<MessageMapperInterface>
+     */
+    private function mappers(): array
+    {
+        return [
+            new AnthropicMessageMapper(),
+            new AWSMessageMapper(),
+            new GeminiMessageMapper(),
+            new OpenAIMessageMapper(),
+            new OpenAIResponsesMessageMapper(),
+            new MistralMessageMapper(),
+        ];
     }
 
     private function buildBlockTool(): Tool
