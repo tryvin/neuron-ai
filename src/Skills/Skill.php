@@ -52,6 +52,22 @@ final class Skill
         return $this->namespace;
     }
 
+    /**
+     * A copy of the skill under another identity, for registries that namespace
+     * the skills they load.
+     */
+    public function withIdentity(string $namespace, string $id): self
+    {
+        return new self(
+            $this->name,
+            $this->description,
+            $this->storage,
+            $this->path,
+            $namespace,
+            $id,
+        );
+    }
+
     public function getDescription(): string
     {
         return $this->description;

@@ -53,6 +53,18 @@ class SkillTest extends TestCase
         $this->assertSame('plug', $namespaced->getNamespace());
     }
 
+    public function test_reidentifies_the_same_skill_for_a_namespaced_registry(): void
+    {
+        $skill = $this->skill($this->files());
+
+        $identified = $skill->withIdentity('plugin:browser', 'plugin:browser:alpha');
+
+        $this->assertSame('plugin:browser:alpha', $identified->getId());
+        $this->assertSame('plugin:browser', $identified->getNamespace());
+        $this->assertSame($skill->getPath(), $identified->getPath());
+        $this->assertSame($skill->read('SKILL.md'), $identified->read('SKILL.md'));
+    }
+
     public function test_lists_and_inspects_the_files_of_the_skill_folder(): void
     {
         $skill = $this->skill($this->files());
