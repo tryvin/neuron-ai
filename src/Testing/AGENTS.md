@@ -262,6 +262,17 @@ $transport->assertToolsListCalled();
 $transport->assertToolCalled('search');
 ```
 
+Negotiation answers come from the fake itself, outside the queue. By default
+it acts as a legacy server; `asModern()` answers `server/discover` with a
+modern result. `withServerCapabilities()` sets what the fake server advertises
+in both negotiation answers:
+
+```php
+$transport = (new FakeMcpTransport())->asModern()->withServerCapabilities([
+    'extensions' => ['io.modelcontextprotocol/ui' => new stdClass()],
+]);
+```
+
 ## Dependencies
 
 - `Providers` module (implements interfaces)

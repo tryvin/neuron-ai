@@ -39,6 +39,20 @@ class McpClient
     protected ?string $instructions = null;
 
     /**
+     * Extensions the application opted into, as extension id => settings.
+     *
+     * @var array<string, mixed>
+     */
+    protected array $extensions = [];
+
+    /**
+     * Capabilities advertised by the server, including its extensions.
+     *
+     * @var array<string, mixed>|null
+     */
+    protected ?array $serverCapabilities = null;
+
+    /**
      * JSON-RPC error codes that only modern-era servers emit.
      */
     protected const MODERN_ERROR_CODES = [-32020, -32021, -32022];
@@ -52,6 +66,20 @@ class McpClient
      */
     public function __construct(array $config)
     {
+        $extensions = $config['extensions'] ?? [];
+
+        if (! is_array($extensions)) {
+            throw new McpException('The "extensions" option must be an array of extension id => settings.');
+        }
+
+        foreach ($extensions as $settings) {
+            if (! is_array($settings)) {
+                throw new McpException('Each entry of the "extensions" option must be an array of settings, an object on the wire.');
+            }
+        }
+
+        $this->extensions = $extensions;
+
         if (isset($config['transport']) && $config['transport'] instanceof McpTransportInterface) {
             $this->transport = $config['transport'];
         } elseif (isset($config['command'])) {
@@ -129,6 +157,7 @@ class McpClient
                 ?? $result['serverInfo']
                 ?? null;
             $this->instructions = $result['instructions'] ?? null;
+            $this->rememberServerCapabilities($result);
 
             $supportedVersions = $result['supportedVersions'] ?? null;
 
@@ -221,15 +250,21 @@ class McpClient
         $this->protocolVersion = McpProtocolVersions::LEGACY_DEFAULT;
         $this->applyTransportProtocolVersion();
 
+        $capabilities = ['sampling' => new stdClass()];
+
+        $extensions = $this->extensionsObject();
+
+        if ($extensions instanceof stdClass) {
+            $capabilities['extensions'] = $extensions;
+        }
+
         $request = [
             'jsonrpc' => '2.0',
             'id' => ++$this->requestId,
             'method' => 'initialize',
             'params' => [
                 'protocolVersion' => McpProtocolVersions::LEGACY_DEFAULT,
-                'capabilities' => (object) [
-                    'sampling' => new stdClass(),
-                ],
+                'capabilities' => (object) $capabilities,
                 'clientInfo' => (object) [
                     'name' => 'neuron-ai',
                     'version' => '1.0.0',
@@ -249,6 +284,7 @@ class McpClient
 
         $this->serverInfo = $response['result']['serverInfo'] ?? null;
         $this->instructions = $response['result']['instructions'] ?? null;
+        $this->rememberServerCapabilities($response['result']);
 
         $request = [
             'jsonrpc' => '2.0',
@@ -257,6 +293,53 @@ class McpClient
 
         $this->transport->send($request);
         $this->applyTransportProtocolVersion();
+    }
+
+    /**
+     * Keep the capabilities the server advertised in a negotiation result
+     * (server/discover or initialize). Malformed values are discarded.
+     *
+     * @param  array<string, mixed>  $result
+     */
+    protected function rememberServerCapabilities(array $result): void
+    {
+        $capabilities = $result['capabilities'] ?? null;
+
+        $this->serverCapabilities = is_array($capabilities) ? $capabilities : null;
+    }
+
+    /**
+     * The opted-in extensions as the JSON object the protocol expects:
+     * extension id => settings, with empty settings serialized as {}.
+     *
+     * Null when the application did not opt into any extension.
+     */
+    protected function extensionsObject(): ?stdClass
+    {
+        if ($this->extensions === []) {
+            return null;
+        }
+
+        $extensions = [];
+
+        foreach ($this->extensions as $id => $settings) {
+            $extensions[$id] = (object) $settings;
+        }
+
+        return (object) $extensions;
+    }
+
+    /**
+     * Client capabilities for the modern per-request _meta envelope.
+     *
+     * Roots and sampling are deprecated in modern revisions: only the
+     * extensions the application opted into are advertised.
+     */
+    protected function clientCapabilities(): stdClass
+    {
+        $extensions = $this->extensionsObject();
+
+        return $extensions instanceof stdClass ? (object) ['extensions' => $extensions] : new stdClass();
     }
 
     /**
@@ -288,9 +371,7 @@ class McpClient
                     'name' => 'neuron-ai',
                     'version' => '1.0.0',
                 ],
-                // Roots and sampling are deprecated in modern revisions:
-                // advertise no client capabilities.
-                'io.modelcontextprotocol/clientCapabilities' => new stdClass(),
+                'io.modelcontextprotocol/clientCapabilities' => $this->clientCapabilities(),
             ];
         }
 
@@ -523,5 +604,43 @@ class McpClient
     public function getInstructions(): ?string
     {
         return $this->instructions;
+    }
+
+    /**
+     * Capabilities advertised by the server during negotiation, including
+     * its extensions. Null when the server disclosed none.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function getCapabilities(): ?array
+    {
+        return $this->serverCapabilities;
+    }
+
+    /**
+     * Whether the server advertised support for the given extension.
+     */
+    public function hasExtension(string $id): bool
+    {
+        return $this->extensionSettings($id) !== null;
+    }
+
+    /**
+     * Settings the server advertised for an extension, empty when it
+     * advertised none. Null when the server did not advertise the extension.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function extensionSettings(string $id): ?array
+    {
+        $extensions = $this->serverCapabilities['extensions'] ?? null;
+
+        if (! is_array($extensions) || ! array_key_exists($id, $extensions)) {
+            return null;
+        }
+
+        $settings = $extensions[$id];
+
+        return is_array($settings) ? $settings : [];
     }
 }

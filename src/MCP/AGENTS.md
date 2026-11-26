@@ -119,6 +119,40 @@ protected function tools(): array
 }
 ```
 
+## Extensions
+
+MCP extensions are opt-in: nothing is advertised unless the connector is
+configured with it. `extensions` maps an extension identifier to its settings.
+
+```php
+$connector = McpConnector::make([
+    'url' => 'https://mcp.example.com',
+    'token' => env('MCP_BEARER_TOKEN'),
+    'extensions' => [
+        'io.modelcontextprotocol/ui' => [
+            'mimeTypes' => ['text/html;profile=mcp-app'],
+        ],
+    ],
+]);
+```
+
+The client announces them in every request on modern revisions
+(`_meta["io.modelcontextprotocol/clientCapabilities"].extensions`, the
+`server/discover` probe included) and in the `initialize` handshake on legacy
+revisions, HTTP+SSE included. Settings must be arrays; an empty array is sent
+as `{}`.
+
+What the server advertised in return is readable from the connector:
+
+```php
+$connector->hasExtension('io.modelcontextprotocol/ui');       // bool
+$connector->extensionSettings('io.modelcontextprotocol/ui');  // array, or null when not advertised
+$connector->capabilities();                                   // full server capabilities, or null
+```
+
+An extension Neuron does not interpret is preserved as received. A server that
+omits an extension does not support it: the application decides how to degrade.
+
 ## Multiple MCP Servers
 
 ```php

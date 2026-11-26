@@ -42,6 +42,14 @@ class FakeMcpTransport implements McpTransportInterface
     protected ?array $discoverResponse = null;
 
     /**
+     * Capabilities the fake server advertises while negotiating: in the
+     * modern server/discover result and in the legacy initialize result.
+     *
+     * @var array<string, mixed>
+     */
+    protected array $serverCapabilities = [];
+
+    /**
      * @param  array<string, mixed>  ...$responses  Predetermined responses to return sequentially from receive()
      */
     public function __construct(array ...$responses)
@@ -74,6 +82,18 @@ class FakeMcpTransport implements McpTransportInterface
     public function answerDiscoverWith(array $response): self
     {
         $this->discoverResponse = $response;
+
+        return $this;
+    }
+
+    /**
+     * Advertise the given capabilities during protocol negotiation.
+     *
+     * @param array<string, mixed> $capabilities
+     */
+    public function withServerCapabilities(array $capabilities): self
+    {
+        $this->serverCapabilities = $capabilities;
 
         return $this;
     }
@@ -147,7 +167,7 @@ class FakeMcpTransport implements McpTransportInterface
                     'result' => [
                         'resultType' => 'complete',
                         'supportedVersions' => ['2026-07-28'],
-                        'capabilities' => ['tools' => []],
+                        'capabilities' => $this->serverCapabilities,
                         '_meta' => [
                             'io.modelcontextprotocol/serverInfo' => [
                                 'name' => 'fake-mcp-server',
@@ -176,7 +196,7 @@ class FakeMcpTransport implements McpTransportInterface
                 'jsonrpc' => '2.0',
                 'result' => [
                     'protocolVersion' => '2024-11-05',
-                    'capabilities' => [],
+                    'capabilities' => $this->serverCapabilities,
                     'serverInfo' => [
                         'name' => 'fake-mcp-server',
                         'version' => '1.0.0',

@@ -10,6 +10,7 @@ use NeuronAI\MCP\McpConnector;
 use NeuronAI\Testing\FakeMcpTransport;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
+use stdClass;
 
 use function serialize;
 use function unserialize;
@@ -44,6 +45,23 @@ class McpConnectorTest extends TestCase
 
 
         return [$connector, $transport];
+    }
+
+    public function testConnectorExposesServerExtensions(): void
+    {
+        $capabilities = [
+            'tools' => new stdClass(),
+            'extensions' => ['io.modelcontextprotocol/ui' => new stdClass()],
+        ];
+
+        $transport = (new FakeMcpTransport())->asModern()->withServerCapabilities($capabilities);
+
+        $connector = new McpConnector(['transport' => $transport]);
+
+        $this->assertTrue($connector->hasExtension('io.modelcontextprotocol/ui'));
+        $this->assertSame([], $connector->extensionSettings('io.modelcontextprotocol/ui'));
+        $this->assertSame($capabilities, $connector->capabilities());
+        $this->assertFalse($connector->hasExtension('io.modelcontextprotocol/tasks'));
     }
 
     public function testExcludeReturnsSelf(): void

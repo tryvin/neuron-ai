@@ -94,6 +94,41 @@ class McpConnector
     }
 
     /**
+     * Capabilities advertised by the server, including its extensions.
+     *
+     * @return array<string, mixed>|null
+     *
+     * @throws McpException
+     */
+    public function capabilities(): ?array
+    {
+        return $this->client()->getCapabilities();
+    }
+
+    /**
+     * Whether the server advertised support for the given extension.
+     *
+     * @throws McpException
+     */
+    public function hasExtension(string $id): bool
+    {
+        return $this->client()->hasExtension($id);
+    }
+
+    /**
+     * Settings the server advertised for an extension, or null when it did
+     * not advertise the extension.
+     *
+     * @return array<string, mixed>|null
+     *
+     * @throws McpException
+     */
+    public function extensionSettings(string $id): ?array
+    {
+        return $this->client()->extensionSettings($id);
+    }
+
+    /**
      * Get the list of available Tools from the server.
      *
      * @return ToolInterface[]
