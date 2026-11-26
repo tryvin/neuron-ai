@@ -37,6 +37,13 @@ class FakePlugin extends Plugin
     public array $configs = [];
 
     /**
+     * The connectors built by the factory, in order.
+     *
+     * @var McpConnector[]
+     */
+    public array $builtConnectors = [];
+
+    /**
      * The servers whose URL contains this value are unreachable.
      */
     public string $offline = '';
@@ -50,7 +57,7 @@ class FakePlugin extends Plugin
 
         $offline = $this->offline !== '' && str_contains((string) ($config['url'] ?? ''), $this->offline);
 
-        return new McpConnector([
+        return $this->builtConnectors[] = new McpConnector([
             'transport' => $offline ? new OfflineMcpTransport() : new FakeMcpTransport(self::TOOLS),
         ]);
     }

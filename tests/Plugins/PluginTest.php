@@ -6,6 +6,8 @@ namespace NeuronAI\Tests\Plugins;
 
 use JsonException;
 use NeuronAI\Exceptions\PluginException;
+use NeuronAI\MCP\Apps\McpAppSession;
+use NeuronAI\MCP\McpConnector;
 use NeuronAI\Plugins\Plugin;
 use NeuronAI\Skills\SkillTool;
 use NeuronAI\Tests\Stubs\ArrayStorage;
@@ -593,5 +595,102 @@ class PluginTest extends TestCase
         $this->assertStringContainsString('- notion-spec-to-implementation: Turn a Notion spec into an implementation plan.', $description);
         // The skill reads the files bundled in its folder
         $this->assertStringStartsWith('# Spec parsing', ($skill)('notion-spec-to-implementation', 'reference/spec-parsing.md'));
+    }
+
+    public function test_reuses_the_connector_that_provided_the_tools(): void
+    {
+        $plugin = $this->plugin([
+            'mcp.json' => self::mcp([
+                'acme' => ['type' => 'streamable-http', 'url' => 'https://mcp.acme.example/mcp'],
+            ]),
+        ]);
+
+        $this->assertSame(['server_tool'], $this->names($plugin->tools()));
+        $this->assertCount(1, $plugin->builtConnectors);
+
+        $connector = $plugin->connectorFor('acme');
+
+        $this->assertSame($plugin->builtConnectors[0], $connector);
+        $this->assertSame($connector, $plugin->connectorFor('acme'));
+        $this->assertCount(1, $plugin->builtConnectors);
+
+        $session = $plugin->appSession('acme', [
+            'view' => 'view_1',
+            'tool' => 'server_tool',
+            'callId' => 7,
+        ]);
+
+        $this->assertInstanceOf(McpAppSession::class, $session);
+        $this->assertSame($connector->name(), $session->serverName());
+        $this->assertSame('server_tool', $session->toolName());
+        $this->assertCount(1, $plugin->builtConnectors);
+
+        // The session reads the tool from the connector that already listed it.
+        // A second connector would need another tools/list response.
+        $initialized = $session->handle([
+            'jsonrpc' => '2.0',
+            'id' => 1,
+            'method' => 'ui/initialize',
+            'params' => ['appInfo' => ['name' => 'demo', 'version' => '1.0.0']],
+        ]);
+
+        $this->assertSame('server_tool', $initialized->response['result']['hostContext']['toolInfo']['tool']['name']);
+    }
+
+    public function test_app_sessions_are_bound_to_one_plugin_server(): void
+    {
+        $plugin = $this->plugin([
+            'mcp.json' => self::mcp([
+                'acme' => ['type' => 'streamable-http', 'url' => 'https://mcp.acme.example/mcp'],
+                'other' => ['type' => 'streamable-http', 'url' => 'https://mcp.other.example/mcp'],
+            ]),
+        ]);
+
+        $plugin->tools();
+
+        $session = $plugin->appSession('other', ['view' => 'view_2', 'tool' => 'server_tool']);
+
+        $this->assertSame($plugin->builtConnectors[1]->name(), $session->serverName());
+        $this->assertCount(2, $plugin->builtConnectors);
+    }
+
+    public function test_an_unknown_server_has_no_connector_or_session(): void
+    {
+        $plugin = $this->plugin();
+
+        $this->expectException(PluginException::class);
+
+        $plugin->appSession('missing', ['view' => 'view_1', 'tool' => 'server_tool']);
+    }
+
+    public function test_it_does_not_rebuild_a_connector_that_failed(): void
+    {
+        $plugin = new class (new ArrayStorage([
+            'plugin.json' => self::manifest(),
+            'mcp.json' => self::mcp([
+                'acme' => ['type' => 'streamable-http', 'url' => 'https://mcp.acme.example/mcp'],
+            ]),
+        ])) extends FakePlugin {
+            public int $attempts = 0;
+
+            protected function connector(array $config): McpConnector
+            {
+                $this->attempts++;
+
+                throw new PluginException('Connection refused');
+            }
+        };
+
+        $this->assertSame([], $plugin->tools());
+        $this->assertSame(["MCP server 'acme': Connection refused."], $plugin->errors());
+
+        try {
+            $plugin->connectorFor('acme');
+            $this->fail('The stored failure must be rethrown.');
+        } catch (PluginException $exception) {
+            $this->assertSame('Connection refused', $exception->getMessage());
+        }
+
+        $this->assertSame(1, $plugin->attempts);
     }
 }

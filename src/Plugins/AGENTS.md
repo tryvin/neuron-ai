@@ -90,6 +90,35 @@ With several plugins, or plugins and `Skills` together, all the skills appear in
 
 To use only the MCP servers of a plugin, opt its skills out: `->exclude([\NeuronAI\Skills\SkillTool::class])`.
 
+### MCP Apps sessions
+
+A plugin holds one connector per server, built on first use and shared by the
+agent's tools and any app view. Fetch the connector to serve the view's HTML,
+then bind the session to the server that declared the tool:
+
+```php
+use NeuronAI\MCP\Apps\McpAppSession;
+use NeuronAI\Plugins\Plugin;
+
+$plugin = Plugin::make($dir)->server('erp', ['token' => $token]);
+$connector = $plugin->connectorFor('erp'); // the connector the tools came from
+$resource = $connector->uiResourceFor('get_sales'); // HTML to serve from your own origin
+
+$session = $plugin->appSession('erp', [
+    'view' => $viewId,
+    'tool' => 'get_sales',
+    'callId' => $callId,
+    'host' => ['name' => 'acme-chat', 'version' => '1.0.0'],
+]);
+
+$result = $session->handle($message); // JSON-RPC from the view
+```
+
+`appSession()` takes the server name, not a global tool name: a view can only
+reach tools of that connector. See `src/MCP/AGENTS.md` for the session, actions
+and policy contract. Neuron owns no HTTP or browser code; the application that
+calls these methods owns the endpoints, the iframe and the bridge.
+
 ## Build a Listing
 
 A marketplace shows plugins before any agent uses them. A loaded `Plugin` tells what it declares, without contacting anything:
@@ -194,7 +223,7 @@ Only HTTP servers are supported.
 - **Headers** must be valid names with printable values, unique case-insensitively.
 - **Failure isolation.** A server that fails to connect is reported, and the other servers and the skills keep loading.
 
-The servers are contacted when `tools()` is called, once per plugin instance. `errors()` grows as the plugin is used: connection failures appear there after that call.
+The servers are contacted when `tools()` is called, once per plugin instance. Each server's connector is memoized: `connectorFor()` and `appSession()` reuse the one that listed the agent's tools, so a server is never contacted twice per plugin instance. `errors()` grows as the plugin is used: connection failures appear there after that call.
 
 ## Troubleshooting
 
@@ -266,6 +295,8 @@ Write instructions for the model, not for a human: say when to use a skill, and 
 | `Plugin::make($source)` | The plugin. `$source` is a directory or a `StorageInterface`. Throws when the manifest is unusable |
 | `->server($name, $config)` | The plugin, with the credentials of one server |
 | `->tools()` | The MCP tools, then the skill tool. Contacts the servers once |
+| `->connectorFor($name)` | The memoized `McpConnector` of one server |
+| `->appSession($name, $config)` | An `McpAppSession` bound to one server's connector |
 | `->errors()` | Every problem met while loading |
 | `->name()`, `->description()` | From the manifest |
 | `->skills()` | The skills, by name |

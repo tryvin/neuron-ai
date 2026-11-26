@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace NeuronAI\Plugins;
 
 use NeuronAI\Exceptions\PluginException;
+use NeuronAI\MCP\Apps\McpAppSession;
 use NeuronAI\MCP\McpConnector;
 use NeuronAI\Skills\Skill;
 use NeuronAI\Skills\Skills;
@@ -99,6 +100,14 @@ class Plugin extends AbstractToolkit
      * @var ToolInterface[]|null
      */
     protected ?array $provided = null;
+
+    /**
+     * One connector per MCP server, by server name. A failed build is kept too,
+     * so a server is never built twice.
+     *
+     * @var array<string, McpConnector|Throwable>
+     */
+    protected array $connectors = [];
 
     public function __construct(string|StorageInterface $source)
     {
@@ -212,7 +221,7 @@ class Plugin extends AbstractToolkit
 
         foreach (array_keys($this->servers) as $name) {
             try {
-                $tools = array_merge($tools, $this->connector($this->configuration($name))->tools());
+                $tools = array_merge($tools, $this->connectorFor($name)->tools());
             } catch (Throwable $exception) {
                 // A server that fails to connect must not break the other components of the plugin
                 $this->errors[] = "MCP server '{$name}': {$exception->getMessage()}.";
@@ -221,6 +230,54 @@ class Plugin extends AbstractToolkit
 
         // The MCP tools come first, so a tool named "skill" wins over the skill tool
         return $this->provided = array_merge($tools, $this->skills->tools());
+    }
+
+    /**
+     * The connector of one MCP server, built once per plugin instance. The
+     * tools given to the agent and app sessions share it, so a server is not
+     * contacted twice and its tool cache survives.
+     *
+     * @throws PluginException When the server is not supported by this plugin
+     * @throws Throwable       When the connector could not be built
+     */
+    public function connectorFor(string $name): McpConnector
+    {
+        if (array_key_exists($name, $this->connectors)) {
+            $connector = $this->connectors[$name];
+
+            if ($connector instanceof Throwable) {
+                throw $connector;
+            }
+
+            return $connector;
+        }
+
+        if (!array_key_exists($name, $this->servers)) {
+            throw new PluginException("MCP server '{$name}' is not supported by this plugin.");
+        }
+
+        try {
+            return $this->connectors[$name] = $this->connector($this->configuration($name));
+        } catch (Throwable $exception) {
+            $this->connectors[$name] = $exception;
+
+            throw $exception;
+        }
+    }
+
+    /**
+     * A host-side app session bound to one server of the plugin. The view can
+     * only reach tools of that server, with the credentials and connector the
+     * agent's tools came from.
+     *
+     * @param  array<string, mixed>  $config
+     *
+     * @throws PluginException
+     * @throws Throwable
+     */
+    public function appSession(string $name, array $config): McpAppSession
+    {
+        return $this->connectorFor($name)->appSession($config);
     }
 
     /**
