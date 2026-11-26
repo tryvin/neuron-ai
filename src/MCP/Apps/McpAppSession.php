@@ -33,7 +33,7 @@ final class McpAppSession
     protected bool $initialized = false;
 
     /** @var array<string, mixed> */
-    protected array $hostCapabilities = [];
+    protected array $hostCapabilities;
 
     /** @var array<string, mixed> */
     protected array $context;
