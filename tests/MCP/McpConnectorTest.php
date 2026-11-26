@@ -173,9 +173,33 @@ class McpConnectorTest extends TestCase
         return [
             'content for the model' => [
                 ['content' => [['type' => 'text', 'text' => 'Total: 42']], 'structuredContent' => ['total' => 42], '_meta' => ['timestamp' => 'now']],
-                '[{"type":"text","text":"Total: 42"}]',
+                'Total: 42',
                 ['total' => 42],
                 ['mcp' => ['isError' => false, 'resultMeta' => ['timestamp' => 'now']]],
+            ],
+            'two text blocks' => [
+                ['content' => [['type' => 'text', 'text' => 'First'], ['type' => 'text', 'text' => 'Second']]],
+                "First\nSecond",
+                null,
+                ['mcp' => ['isError' => false]],
+            ],
+            'text and image' => [
+                ['content' => [['type' => 'text', 'text' => 'Total: 42'], ['type' => 'image', 'data' => 'aGk=', 'mimeType' => 'image/png']]],
+                'Total: 42',
+                null,
+                ['mcp' => ['isError' => false]],
+            ],
+            'image only' => [
+                ['content' => [['type' => 'image', 'data' => 'aGk=', 'mimeType' => 'image/png']]],
+                '[{"type":"image","data":"aGk=","mimeType":"image\/png"}]',
+                null,
+                ['mcp' => ['isError' => false]],
+            ],
+            'image and structured data' => [
+                ['content' => [['type' => 'image', 'data' => 'aGk=', 'mimeType' => 'image/png']], 'structuredContent' => ['total' => 42]],
+                '{"total":42}',
+                ['total' => 42],
+                ['mcp' => ['isError' => false]],
             ],
             'empty content with structured data' => [
                 ['content' => [], 'structuredContent' => ['total' => 42]],
@@ -203,7 +227,7 @@ class McpConnectorTest extends TestCase
             ],
             'tool error' => [
                 ['content' => [['type' => 'text', 'text' => 'boom']], 'isError' => true],
-                '[{"type":"text","text":"boom"}]',
+                'boom',
                 null,
                 ['mcp' => ['isError' => true]],
             ],
@@ -251,7 +275,7 @@ class McpConnectorTest extends TestCase
         $tool->execute();
 
         $transport->assertToolCalled('get_sales');
-        $this->assertSame('[{"type":"text","text":"Total: 42"}]', $tool->getResult());
+        $this->assertSame('Total: 42', $tool->getResult());
         $this->assertSame(['total' => 42], $tool->getOutput()->structuredContent);
         $this->assertSame(['mcp' => ['isError' => false]], $tool->getOutput()->meta);
         $this->assertSame('ui://sales/dashboard.html', $tool->getMeta()['mcp']['ui']['resourceUri']);

@@ -20,6 +20,7 @@ use ReflectionException;
 use function array_filter;
 use function array_key_exists;
 use function array_map;
+use function implode;
 use function in_array;
 use function is_array;
 use function is_null;
@@ -391,27 +392,35 @@ class McpConnector
     }
 
     /**
-     * The text the model reads: what invokeTool() has always produced, the
-     * content blocks as JSON. A result with no content, or an empty one, is
-     * built for an app that reads structuredContent: the model then gets
-     * that as JSON instead of an empty result.
+     * The text the model reads: the text blocks of the result, joined with a
+     * newline. A result without text blocks is built for an app, so the model
+     * reads its structuredContent as JSON instead. Without either, the content
+     * blocks are JSON, as they were before, and an absent content is ''.
      *
      * @param array<string, mixed> $result
      */
     protected function resultText(array $result): string
     {
         $content = $result['content'] ?? null;
+        $texts = [];
 
-        if (is_array($content) && $content !== []) {
-            return (string) json_encode($content);
+        if (is_array($content)) {
+            foreach ($content as $block) {
+                if (is_array($block) && ($block['type'] ?? null) === 'text' && is_string($block['text'] ?? null)) {
+                    $texts[] = $block['text'];
+                }
+            }
+        }
+
+        if ($texts !== []) {
+            return implode("\n", $texts);
         }
 
         if (isset($result['structuredContent'])) {
             return (string) json_encode($result['structuredContent']);
         }
 
-        // Still what invokeTool() always produced: "[]" for an empty content, "" for none.
-        return is_array($content) ? '[]' : (string) $content;
+        return is_array($content) ? (string) json_encode($content) : (string) $content;
     }
 
     /**

@@ -196,9 +196,11 @@ An MCP tool returns a `ToolOutput` with the whole result:
 | `meta['mcp']['isError']` | Whether the server reported `isError` |
 | `meta['mcp']['resultMeta']` | The `_meta` the server put on the result |
 
-The text is what earlier versions produced: the content blocks as JSON. A
-result with no content, or an empty one, gives the model `structuredContent` as
-JSON instead of an empty result.
+The text is the `text` of every text content block, joined with a newline:
+that is what the MCP specification means by tool result text. Non-text blocks
+are left out when a text block exists. Without any text block, the model reads
+`structuredContent` as JSON; without that either, the content blocks are JSON,
+as they were before.
 
 ```php
 $output = $connector->invokeToolResult(item: $rawTool, arguments: ['region' => 'emea']);
