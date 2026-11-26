@@ -6,6 +6,9 @@ namespace NeuronAI\MCP;
 
 use NeuronAI\Exceptions\ArrayPropertyException;
 use NeuronAI\Exceptions\ToolException;
+use NeuronAI\MCP\Apps\McpAppException;
+use NeuronAI\MCP\Apps\McpAppResource;
+use NeuronAI\MCP\Apps\McpAppSession;
 use NeuronAI\StaticConstructor;
 use NeuronAI\Tools\ArrayProperty;
 use NeuronAI\Tools\ObjectProperty;
@@ -20,6 +23,9 @@ use ReflectionException;
 use function array_filter;
 use function array_key_exists;
 use function array_map;
+use function array_merge;
+use function array_values;
+use function base64_decode;
 use function implode;
 use function in_array;
 use function is_array;
@@ -195,6 +201,156 @@ class McpConnector
     public function rawTools(): array
     {
         return $this->rawTools ??= $this->client()->listTools();
+    }
+
+    /**
+     * Raw tool definitions an app may list and call. Unlike tools(), this
+     * ignores only() and exclude(): those filter the model's tool list.
+     *
+     * @return list<array<string, mixed>>
+     *
+     * @throws McpException
+     */
+    public function appTools(): array
+    {
+        return array_values(array_filter(
+            $this->rawTools(),
+            fn (array $tool): bool => $this->hasVisibility($tool, 'app'),
+        ));
+    }
+
+    /**
+     * The _meta a raw tool was declared with, or [] when it has none.
+     *
+     * @return array<string, mixed>
+     *
+     * @throws McpException
+     */
+    public function toolMeta(string $name): array
+    {
+        foreach ($this->rawTools() as $tool) {
+            if (($tool['name'] ?? null) === $name) {
+                return is_array($tool['_meta'] ?? null) ? $tool['_meta'] : [];
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * Call a tool by name for an app. The tool must already have been checked
+     * against appTools(): this method does not apply the model's filters.
+     *
+     * @param  array<string, mixed>  $arguments
+     * @return array<string, mixed>
+     *
+     * @throws McpException
+     */
+    public function callTool(string $name, array $arguments): array
+    {
+        return $this->callToolResult(['name' => $name], $arguments);
+    }
+
+    /**
+     * The raw resources/read result, contents included.
+     *
+     * @return array<string, mixed>
+     *
+     * @throws McpException
+     */
+    public function readResource(string $uri): array
+    {
+        return $this->client()->readResource($uri);
+    }
+
+    /**
+     * Fetch an HTML resource and merge what the server declared in
+     * resources/list with what it sent in resources/read. On a conflict the
+     * read metadata wins: it describes the bytes actually returned.
+     *
+     * @throws McpException
+     * @throws McpAppException
+     */
+    public function resource(string $uri): McpAppResource
+    {
+        $listing = [];
+
+        foreach ($this->client()->listResources() as $item) {
+            if (is_array($item) && ($item['uri'] ?? null) === $uri) {
+                $listing = $item;
+                break;
+            }
+        }
+
+        $contents = $this->readResource($uri)['contents'] ?? [];
+        $content = null;
+
+        if (is_array($contents)) {
+            foreach ($contents as $item) {
+                if (is_array($item) && ($item['uri'] ?? null) === $uri) {
+                    $content = $item;
+                    break;
+                }
+            }
+
+            if ($content === null) {
+                foreach ($contents as $item) {
+                    if (is_array($item) && ($item['mimeType'] ?? null) === 'text/html;profile=mcp-app') {
+                        $content = $item;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (!is_array($content)) {
+            throw new McpAppException("The server did not return the app resource {$uri}.");
+        }
+
+        if (is_string($content['text'] ?? null)) {
+            $html = $content['text'];
+        } elseif (is_string($content['blob'] ?? null)) {
+            $html = base64_decode($content['blob'], true);
+
+            if ($html === false) {
+                throw new McpAppException("The app resource {$uri} is not valid base64.");
+            }
+        } else {
+            throw new McpAppException("The app resource {$uri} has no content.");
+        }
+
+        $mimeType = $content['mimeType'] ?? $listing['mimeType'] ?? '';
+        $listingUi = is_array($listing['_meta']['ui'] ?? null) ? $listing['_meta']['ui'] : [];
+        $contentUi = is_array($content['_meta']['ui'] ?? null) ? $content['_meta']['ui'] : [];
+
+        return new McpAppResource($uri, (string) $mimeType, $html, ['ui' => array_merge($listingUi, $contentUi)]);
+    }
+
+    /**
+     * The UI resource declared by a tool, or null when the tool has none.
+     *
+     * @throws McpException
+     * @throws McpAppException
+     */
+    public function uiResourceFor(string $toolName): ?McpAppResource
+    {
+        $meta = $this->toolMeta($toolName);
+        $uri = $meta['ui']['resourceUri'] ?? $meta['ui/resourceUri'] ?? null;
+
+        return is_string($uri) ? $this->resource($uri) : null;
+    }
+
+    /**
+     * A host-side proxy for one view. The connector is the only server the
+     * session can call, which is how cross-server tool calls stay blocked.
+     *
+     * @param  array<string, mixed>  $config
+     *
+     * @throws McpException
+     */
+    public function appSession(array $config): McpAppSession
+    {
+        return new McpAppSession($this, $config);
     }
 
     /**

@@ -209,6 +209,68 @@ $output = $connector->invokeToolResult(item: $rawTool, arguments: ['region' => '
 `invokeTool()` keeps returning the raw content blocks. The output does not
 repeat the server label or the tool name: the `Tool` beside it has them.
 
+## Apps: the host-side session
+
+Neuron is the MCP client and the host proxy. The application that owns HTTP,
+authentication and the browser bridge binds a view to one tool call of one
+connector:
+
+```php
+$session = $connector->appSession([
+    'view' => $viewId,
+    'tool' => 'get_sales',
+    'callId' => $callId,
+    'host' => ['name' => 'acme-chat', 'version' => '1.0.0'],
+    'capabilities' => ['openLinks' => true, 'logging' => true],
+    'context' => ['theme' => 'dark'],
+    'policy' => $policy, // optional; DefaultMcpAppPolicy otherwise
+]);
+
+$result = $session->handle($message); // a JSON-RPC array from the view
+
+if ($result->action !== null) {
+    // execute after checking the payload, e.g. window.open for OPEN_LINK
+}
+
+if ($result->response !== null) {
+    // send it back to the view
+}
+```
+
+The session answers the app protocol version `2026-01-26`, the only version in
+the official SDK's supported list. It proxies `tools/list`, `tools/call`,
+`resources/read` and `ping` to the connector it was built from: a tool name
+from another server cannot reach it. `only()` and `exclude()` filter the
+model's tools; app calls ignore them and obey `visibility` and the policy.
+App calls never enter the agent loop or chat history.
+
+Actions carry payloads for the backend to execute: `open_link`, `message`,
+`update_model_context`, `display_mode` and `log`. There is no download action:
+the stable spec defines no `ui/download-file`, and Neuron never offers
+`sampling/createMessage`. `ui/update-model-context` replaces the staged
+context, which the backend folds into the next user message; it is never
+appended as a second user message.
+
+Before `ui/notifications/initialized` the host must send nothing to the view.
+After that, the session's builders produce notifications the backend sends
+when it has the data: `toolInput()`, `toolInputPartial()`, `toolResult()`,
+`toolCancelled()`, `hostContextChanged()`, and the `resourceTeardown()` request.
+`toolResult(ToolOutput)` sends the same text the model read in one text block,
+plus `structuredContent`, the result `_meta` and `isError` when set.
+
+`McpAppPolicyInterface` decides on tool calls, resource reads and links.
+`DefaultMcpAppPolicy` allows the first two and permits only http(s) links with
+no credentials or control characters. Applications may replace it for
+domain allowlists and user consent.
+
+`McpConnector::uiResourceFor()` / `resource()` fetch the HTML the app renders,
+merge `resources/list` metadata with the `resources/read` content (content
+wins), and return an `McpAppResource`. Its `headers()` builds a default-deny
+CSP from domains approved by the host; `allowAttribute()` maps declared
+permissions to the iframe `allow` attribute. A web host serves the view from a
+different origin and wraps it in a sandbox proxy, so `ui/notifications/sandbox-*`
+never reaches the session.
+
 ## Multiple MCP Servers
 
 ```php
